@@ -5,6 +5,11 @@ extends Node2D
 
 const DrawLayer := preload("res://scripts/draw_layer.gd")
 const Ui := preload("res://scripts/ui.gd")
+const Rig := preload("res://scripts/rig.gd")
+const RigData := preload("res://scripts/rig_data.gd")
+const HERO_H := 14.5      # hero height in world cells
+const GOLEM_H := 21.0
+const ROOM_H := 24
 
 const COLS := 8
 const ROWS := 9
@@ -17,13 +22,13 @@ const NCOL := 4
 
 const LEVELS := [
 	{"name": "The Sand Pit", "theme": "sand", "moves": 22, "shaft": [3, 5], "room": "left", "fill_top": 17,
-		"rubble": [[3, 5, 0, 3], [4, 4, 4, 6]], "tip": "Match gems next to the sand to drain it!"},
+		"rubble": [[3, 5, 0, 3], [4, 4, 4, 6]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
 	{"name": "Iron Vault", "theme": "iron", "moves": 26, "shaft": [3, 4], "room": "right", "fill_top": 12,
-		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "tip": "Rockets and bombs blast straight through debris."},
+		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
 	{"name": "Crystal Cave", "theme": "crystal", "moves": 29, "shaft": [5, 6], "room": "left", "fill_top": 15,
-		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "tip": "Follow the crystals down the staircase."},
+		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
 	{"name": "Emerald Quarry", "theme": "emerald", "moves": 28, "shaft": [1, 2], "room": "right", "fill_top": 11,
-		"rubble": [[1, 2, 0, 2], [0, 3, 3, 4], [3, 3, 5, 8]], "tip": "Tap a power-up to fire it without a swap."},
+		"rubble": [[1, 2, 0, 2], [0, 3, 3, 4], [3, 3, 5, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
 ]
 
 const THEMES := {
@@ -109,7 +114,21 @@ const SAVE_PATH := "user://progress.cfg"
 # ---------- nodes ----------
 var bg_layer: Node2D
 var back_layer: Node2D
-var hero: Sprite2D
+var hero: Rig
+var golem: Rig
+var hz_layer: Node2D
+var hz_p := 0.0
+var hz_target := 0.0
+var hero_x := 0.0        # hip x in world cells
+var hero_lift := 0.0     # world cells above the floor (jumps, escape)
+var hero_alpha := 1.0
+var look_t := 0.0
+var look_cd := 3.0
+var blink_t := 2.0
+var golem_phase := 0.0
+var golem_attack := 0.0
+var roar_t := 3.0
+var ember_t := 0.0
 var sand_sprite: Sprite2D
 var sand_img: Image
 var sand_tex: ImageTexture
@@ -137,10 +156,13 @@ func _ready() -> void:
 
 	bg_layer = _layer(_draw_bg)
 	back_layer = _layer(_draw_back)
-	hero = Sprite2D.new()
-	hero.texture = tex.hero_push
-	hero.centered = true
+	golem = Rig.new()
+	golem.setup(RigData.GOLEM, "golem_", Color(0.72, 0.66, 0.8))
+	add_child(golem)
+	hero = Rig.new()
+	hero.setup(RigData.HERO, "hero_")
 	add_child(hero)
+	hz_layer = _layer(_draw_hazard)
 	sand_sprite = Sprite2D.new()
 	sand_sprite.centered = false
 	var sm := ShaderMaterial.new()
@@ -155,6 +177,17 @@ func _ready() -> void:
 	var am := CanvasItemMaterial.new()
 	am.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	add_layer.material = am
+	# explicit draw order (rig parts add their own small z offsets)
+	bg_layer.z_index = 0
+	back_layer.z_index = 1
+	golem.z_index = 3
+	hero.z_index = 10
+	hz_layer.z_index = 16
+	sand_sprite.z_index = 20
+	frame_layer.z_index = 21
+	gem_layer.z_index = 22
+	fx_layer.z_index = 23
+	add_layer.z_index = 24
 
 	ui = Ui.new()
 	ui.game = self
@@ -177,7 +210,7 @@ func _layer(fn: Callable) -> Node2D:
 
 func _load_textures() -> void:
 	var names = ["red", "blue", "yellow", "green", "rocket", "bomb", "light", "tile",
-		"hero_push", "hero_cheer", "hero_scared", "door", "torch", "spike", "grain_ball",
+		"door", "torch", "spike", "grain_ball",
 		"grain_shard", "goldbar", "wall_sand", "wall_iron", "wall_crystal", "wall_emerald"]
 	for n in names:
 		tex[n] = load("res://assets/gfx/%s.png" % n)
@@ -289,11 +322,11 @@ func start_level(i: int) -> void:
 	shaft = {"x0": BX + c0 * CELL, "x1": BX + (c1 + 1) * CELL, "y0": 3}
 	if L.room == "left":
 		door_col = shaft.x0 - 1
-		room = {"x0": BX, "x1": door_col, "y0": BY - 18, "y1": BY}
+		room = {"x0": BX, "x1": door_col, "y0": BY - ROOM_H, "y1": BY}
 		facing = 1
 	else:
 		door_col = shaft.x1
-		room = {"x0": door_col + 1, "x1": BX + COLS * CELL, "y0": BY - 18, "y1": BY}
+		room = {"x0": door_col + 1, "x1": BX + COLS * CELL, "y0": BY - ROOM_H, "y1": BY}
 		facing = -1
 	sand = PackedByteArray()
 	sand.resize(SW * SH)
@@ -326,6 +359,14 @@ func start_level(i: int) -> void:
 	fx.clear()
 	tweens.clear()
 	hero_pose = "push"
+	hz_p = 0.0
+	hz_target = 0.0
+	hero_x = door_col + 0.5 - facing * 5.4
+	hero_lift = 0.0
+	hero_alpha = 1.0
+	golem_attack = 0.0
+	look_t = 0.0
+	golem.visible = L.hazard == "golem"
 	sand_sleep = false
 	sand_dirty = true
 	_fill_board()
@@ -622,6 +663,8 @@ func damage_rubble(id: int) -> void:
 	_update_hud()
 
 func _update_hud() -> void:
+	if not L.is_empty() and state != "lost" and state != "won":
+		hz_target = clampf(1.0 - float(moves) / float(L.moves), 0.0, 1.0)
 	var p := 0
 	if grains0 > 0:
 		p = maxi(0, ceili(grains * 100.0 / grains0))
@@ -1068,6 +1111,7 @@ func _win() -> void:
 	play("win")
 	buzz(60)
 	await collapse()
+	await _escape()
 	var ratio = float(moves) / float(L.moves)
 	var stars = 3 if ratio >= 0.3 else (2 if ratio >= 0.12 else 1)
 	if stars > int(progress.best[level_idx]):
@@ -1077,6 +1121,24 @@ func _win() -> void:
 		later(k * 0.04, func(): sparkle(ox + randf() * SW * g, oy + randf() * BY * g, 3))
 	await wait(0.9)
 	ui.show_win(stars, moves, L.name, level_idx < LEVELS.size() - 1)
+
+func _escape() -> void:
+	# the door gives way outward and Zaki runs for the shaft
+	await wait(0.5)
+	door_open = true
+	play("crack", 1.2, -4.0)
+	burst(wx(door_col + 0.5), wy(BY - 8), Color("8a5a2b"), 14, 1.2)
+	hero_pose = "run"
+	var target: float = (shaft.x0 + shaft.x1) / 2.0
+	tween(self, {"hero_x": target}, 0.9, "lin")
+	await wait(0.9)
+	hero_pose = "jump"
+	play("shine", 1.3, -4.0)
+	tween(self, {"hero_lift": float(BY - shaft.y0) + 6.0}, 0.9, "in")
+	tween(self, {"hero_alpha": 0.0}, 0.3, "lin", 0.6)
+	for k in 12:
+		later(k * 0.06, func(): sparkle(wx(hero_x), wy(BY - hero_lift - 6.0), 2))
+	await wait(1.0)
 
 func _set_room_mask(v: int) -> void:
 	for y in range(room.y0, room.y1):
@@ -1088,8 +1150,11 @@ func _set_room_mask(v: int) -> void:
 
 func _lose() -> void:
 	state = "lost"
-	door_open = true
+	hz_target = 1.12
 	hero_pose = "scared"
+	play("boom", 0.6, -6.0)
+	await wait(1.1)
+	door_open = true
 	_set_room_mask(1)
 	burst(wx(door_col + 0.5), wy(BY - 9), Color("8a5a2b"), 16, 1.4)
 	play("crack")
@@ -1124,8 +1189,9 @@ func plus_five() -> void:
 	sand_dirty = true
 	door_open = false
 	hero_pose = "push"
-	_update_hud()
+	golem_attack = 0.0
 	state = "idle"
+	_update_hud()
 	last_input = time
 
 func open_menu() -> void:
@@ -1361,38 +1427,261 @@ func _process(dt: float) -> void:
 	if shake > 0.0:
 		sh = Vector2(randf() - 0.5, randf() - 0.5) * g * 2.0 * shake
 	position = sh
-	_place_hero()
+	_anim(dt)
+	hz_layer.queue_redraw()
 	back_layer.queue_redraw()
 	gem_layer.queue_redraw()
 	fx_layer.queue_redraw()
 	add_layer.queue_redraw()
 
 func _place_hero() -> void:
-	if room.is_empty() or hero == null:
-		return
-	var tname = "hero_" + hero_pose
-	if hero.texture != tex[tname]:
-		hero.texture = tex[tname]
-	var h = 20.5 * g
-	var s = h / 512.0
-	var door_x = wx(door_col) if facing > 0 else wx(door_col + 1)
-	var bob := 0.0
-	var lean := 0.0
+	_anim(0.0)
+
+# ---------- characters: bone-rig animation ----------
+const PUSH_POSE := {"torso": 0.3, "head": -0.22, "arm_up_f": -1.72, "arm_lo_f": 0.28, "arm_up_b": -1.62, "arm_lo_b": 0.2,
+	"leg_up_f": -0.62, "leg_lo_f": 0.55, "leg_up_b": 0.2, "leg_lo_b": 0.12}
+
+func _hero_target(t: float) -> Dictionary:
+	var st := hero_strain
 	match hero_pose:
 		"push":
-			bob = sin(hero_t * 26.0) * g * 0.15 * (0.3 + hero_strain)
-			lean = (0.04 + hero_strain * 0.06) * facing
-		"cheer":
-			bob = -absf(sin(hero_t * 7.0)) * g * 2.5
+			var d := PUSH_POSE.duplicate()
+			var q := sin(t * (18.0 + st * 14.0)) * (0.015 + st * 0.035)
+			d.torso += q + st * 0.06
+			d.arm_up_f -= q * 1.5
+			d.arm_up_b -= q * 1.2
+			d.leg_up_b += st * 0.12
+			if look_t > 0.0:
+				d.head = 0.25
+				d.torso -= 0.12
+			return d
 		"scared":
-			bob = sin(hero_t * 40.0) * g * 0.2
-	hero.scale = Vector2(s, s)
-	hero.flip_h = facing < 0
-	hero.rotation = lean
-	var cx = door_x - facing * 7.2 * g
-	if hero_pose != "push":
-		cx = door_x - facing * 9.5 * g
-	hero.position = Vector2(cx, wy(BY) - h / 2.0 + bob + g * 0.3)
+			var w := sin(t * 38.0) * 0.05
+			return {"torso": -0.18 + w, "head": 0.3, "arm_up_f": -2.55, "arm_lo_f": -1.5 + w, "arm_up_b": -2.25, "arm_lo_b": -1.6 - w,
+				"leg_up_f": 0.35, "leg_lo_f": 0.25, "leg_up_b": -0.05, "leg_lo_b": 0.35}
+		"cheer":
+			var wv := sin(t * 9.0) * 0.25
+			return {"torso": -0.05, "head": -0.1, "arm_up_f": -2.7 + wv, "arm_lo_f": 0.35, "arm_up_b": -2.9 - wv, "arm_lo_b": 0.25,
+				"leg_up_f": -0.15, "leg_lo_f": 0.1, "leg_up_b": 0.12, "leg_lo_b": 0.05}
+		"run":
+			var ph := t * 13.0
+			var sw := sin(ph)
+			var lean := 0.22
+			return {"torso": lean, "head": -0.18, "arm_up_f": -sw * 1.0 - lean, "arm_lo_f": -1.1, "arm_up_b": sw * 1.0 - lean, "arm_lo_b": -1.1,
+				"leg_up_f": sw * 0.8 - lean, "leg_lo_f": maxf(0.0, -cos(ph)) * 1.1, "leg_up_b": -sw * 0.8 - lean, "leg_lo_b": maxf(0.0, cos(ph)) * 1.1}
+		"jump":
+			return {"torso": -0.1, "head": -0.3, "arm_up_f": -2.9, "arm_lo_f": 0.2, "arm_up_b": -2.8, "arm_lo_b": 0.2,
+				"leg_up_f": -0.5, "leg_lo_f": 0.9, "leg_up_b": 0.3, "leg_lo_b": 0.7}
+	return {}
+
+func _hero_face() -> String:
+	match hero_pose:
+		"scared":
+			return "scared"
+		"cheer", "run", "jump":
+			return "happy"
+	if look_t > 0.0:
+		return "look" if hz_p < 0.75 else "scared"
+	if blink_t < 0.12:
+		return "blink"
+	return "strain" if hero_strain > 0.25 or hz_p > 0.5 else "neutral"
+
+func _golem_target(t: float, speed: float) -> Dictionary:
+	var ph := golem_phase
+	var sw := sin(ph)
+	var breathe := sin(t * 2.2) * 0.04
+	var d := {"body": 0.06 + breathe + absf(sw) * 0.04, "head": -0.05 - breathe, "jaw": 0.0,
+		"arm_up_f": -sw * 0.45 * speed - 0.15, "arm_lo_f": -0.35, "arm_up_b": sw * 0.45 * speed - 0.1, "arm_lo_b": -0.3,
+		"leg_f": sw * 0.42 * speed, "leg_b": -sw * 0.42 * speed}
+	if roar_t < 0.9:
+		d.jaw = 0.45 * sin(clampf(roar_t / 0.9, 0.0, 1.0) * PI)
+		d.head -= d.jaw * 0.4
+	if golem_attack > 0.0:
+		var a := golem_attack
+		var up := clampf(a * 2.0, 0.0, 1.0)
+		var down := clampf((a - 0.5) * 3.0, 0.0, 1.0)
+		var arm := lerpf(-0.2, -3.0, up) + down * 2.3
+		d.arm_up_f = arm
+		d.arm_up_b = arm + 0.2
+		d.arm_lo_f = -0.4
+		d.arm_lo_b = -0.4
+		d.jaw = 0.5
+		d.body = 0.25 * down - 0.1 * up
+	return d
+
+func _hazard_front() -> float:
+	# x (world cells) of the hazard's leading edge
+	var far = room.x0 if facing > 0 else room.x1
+	var back := hero_x - facing * 3.2
+	return far + facing * hz_p * absf(back - far)
+
+func _anim(dt: float) -> void:
+	if room.is_empty() or hero == null:
+		return
+	# hazard creeps toward its target
+	var prev := hz_p
+	hz_p = move_toward(hz_p, hz_target, dt * 0.35)
+	var hz_speed := absf(hz_p - prev) / maxf(dt, 0.0001)
+	# hero timers: blink, glance back at the danger
+	blink_t -= dt
+	if blink_t < 0.0:
+		blink_t = 2.0 + randf() * 2.5
+	look_t = maxf(0.0, look_t - dt)
+	if hero_pose == "push" and state != "won":
+		look_cd -= dt
+		if look_cd <= 0.0 and hz_p > 0.2:
+			look_t = 0.9
+			look_cd = lerpf(5.0, 1.6, hz_p) + randf()
+	var k: float = 1.0 if dt == 0.0 else minf(1.0, dt * 14.0)
+	hero.pose(_hero_target(hero_t), k)
+	hero.set_face(_hero_face())
+	var s := HERO_H * g / 653.0
+	hero.scale = Vector2(s * facing, s)
+	var bob := 0.0
+	match hero_pose:
+		"push":
+			bob = sin(hero_t * 26.0) * 0.12 * (0.3 + hero_strain)
+		"cheer":
+			bob = -absf(sin(hero_t * 7.0)) * 2.2
+		"run":
+			bob = -absf(sin(hero_t * 13.0)) * 0.7
+		"scared":
+			bob = sin(hero_t * 40.0) * 0.15
+	hero.position = Vector2(wx(hero_x), wy(BY - hero_lift - bob + 0.35) - 181.0 * s)
+	hero.modulate.a = hero_alpha
+	# golem
+	if L.get("hazard", "") == "golem":
+		golem_phase += hz_speed * 9.0 * dt
+		roar_t += dt
+		if roar_t > 4.5 + randf() * 3.0 and hz_p > 0.15:
+			roar_t = 0.0
+			play("boom", 0.45, -12.0)
+		if state == "lost":
+			golem_attack = minf(1.0, golem_attack + dt * 1.2)
+		var gs := GOLEM_H * g / 639.0
+		var gk: float = 1.0 if dt == 0.0 else minf(1.0, dt * 10.0)
+		golem.pose(_golem_target(hero_t, clampf(hz_speed * 6.0, 0.0, 1.0)), gk)
+		golem.scale = Vector2(gs * facing, gs)
+		var gx := _hazard_front() - facing * 5.5
+		golem.position = Vector2(wx(gx), wy(BY + 0.3 - absf(sin(golem_phase)) * 0.4) - 213.0 * gs)
+	# lava embers
+	if L.get("hazard", "") == "lava" and dt > 0.0:
+		ember_t -= dt
+		if ember_t <= 0.0 and hz_p > 0.02:
+			ember_t = 0.08
+			var far = room.x0 if facing > 0 else room.x1
+			var ex := lerpf(far, _hazard_front(), randf())
+			parts.append({"x": wx(ex), "y": wy(BY - 2.0), "vx": (randf() - 0.5) * 30.0, "vy": -60.0 - randf() * 80.0, "life": 0.0,
+				"max": 0.9 + randf() * 0.6, "col": Color(1.0, 0.6 + randf() * 0.3, 0.15), "size": g * 0.45, "grav": -10.0, "kind": "dot"})
+
+# ---------- hazards ----------
+func _draw_hazard(ci: CanvasItem) -> void:
+	if room.is_empty():
+		return
+	match L.get("hazard", ""):
+		"spikes":
+			_draw_spike_wall(ci)
+		"water":
+			_draw_water(ci)
+		"lava":
+			_draw_lava(ci)
+
+func _draw_spike_wall(ci: CanvasItem) -> void:
+	var far = room.x0 if facing > 0 else room.x1
+	var front := _hazard_front()
+	var spike_len := 4.4
+	var plate := front - facing * spike_len
+	var y0: float = room.y0 + 1.0
+	var y1: float = BY - 0.2
+	var xa := minf(far, plate)
+	var xb := maxf(far, plate) + 0.0
+	var r: Rect2 = Rect2(wx(xa), wy(y0), maxf(1.0, (xb - xa)) * g + g * 1.2 * (1 if facing > 0 else 0), (y1 - y0) * g)
+	if facing < 0:
+		r.position.x -= g * 1.2
+		r.size.x += g * 1.2
+	_vgrad(ci, r, Color("6b6f7a"), Color("3a3d45"))
+	var edge_x: float = wx(plate) + (g * 1.2 if facing > 0 else -g * 1.2)
+	ci.draw_rect(Rect2(Vector2(minf(edge_x, wx(plate)), wy(y0)), Vector2(g * 1.2, (y1 - y0) * g)), Color("8b909c"))
+	for k in 6:
+		var y := y0 + (y1 - y0) * (0.1 + k * 0.16)
+		ci.draw_circle(Vector2((edge_x + wx(plate)) / 2.0, wy(y)), g * 0.35, Color("c9ccd4"))
+		var sz := Vector2(spike_len * g, g * 2.0)
+		if facing > 0:
+			ci.draw_texture_rect(tex.spike, Rect2(Vector2(edge_x - g * 0.4, wy(y) - sz.y / 2.0), sz), false)
+		else:
+			ci.draw_set_transform(Vector2(edge_x + g * 0.4, wy(y)), 0.0, Vector2(-1, 1))
+			ci.draw_texture_rect(tex.spike, Rect2(Vector2(0, -sz.y / 2.0), sz), false)
+			ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_water(ci: CanvasItem) -> void:
+	var x0 := wx(room.x0)
+	var x1 := wx(room.x1)
+	var room_h := float(room.y1 - room.y0)
+	var level: float = BY - (0.6 + hz_p * room_h * 0.72)
+	# inflow from a pipe high on the far wall
+	var far = room.x0 if facing > 0 else room.x1
+	var px := wx(far + facing * 2.2)
+	var py := wy(room.y0 + 3.5)
+	ci.draw_circle(Vector2(px, py), g * 1.5, Color("2a2f3a"))
+	ci.draw_circle(Vector2(px, py), g * 1.0, Color("10141c"))
+	if hz_p < 0.999 or state == "lost":
+		var wob := sin(time * 9.0) * g * 0.2
+		ci.draw_rect(Rect2(Vector2(px - g * 0.7 + wob, py), Vector2(g * 1.4, wy(level) - py)), Color(0.45, 0.75, 1.0, 0.55))
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var n := 24
+	for i in n + 1:
+		var x := lerpf(x0, x1, float(i) / n)
+		var wv := sin(time * 3.0 + i * 0.8) * g * 0.35 + sin(time * 5.3 + i * 1.7) * g * 0.15
+		pts.append(Vector2(x, wy(level) + wv))
+		cols.append(Color(0.45, 0.78, 1.0, 0.6))
+	pts.append(Vector2(x1, wy(BY)))
+	cols.append(Color(0.08, 0.28, 0.6, 0.85))
+	pts.append(Vector2(x0, wy(BY)))
+	cols.append(Color(0.08, 0.28, 0.6, 0.85))
+	ci.draw_polygon(pts, cols)
+	var top := PackedVector2Array()
+	for i in n + 1:
+		top.append(pts[i])
+	ci.draw_polyline(top, Color(0.85, 0.95, 1.0, 0.8), maxf(1.5, g * 0.35), true)
+	for k in 8:
+		var bx := lerpf(x0, x1, fmod(k * 0.137 + 0.05, 1.0))
+		var by := wy(BY) - fmod(time * 30.0 + k * 41.0, maxf(1.0, (BY - level) * g))
+		ci.draw_arc(Vector2(bx + sin(time * 4.0 + k) * g * 0.3, by), g * 0.25, 0, TAU, 10, Color(0.9, 0.97, 1.0, 0.6), 1.5)
+
+func _draw_lava(ci: CanvasItem) -> void:
+	var far = room.x0 if facing > 0 else room.x1
+	var front := _hazard_front()
+	var h := 2.2 + hz_p * 2.6
+	# lava pouring from the far wall
+	var px := wx(far + facing * 2.0)
+	var py := wy(room.y0 + 4.0)
+	ci.draw_circle(Vector2(px, py), g * 1.5, Color("2a1a14"))
+	if hz_p > 0.0:
+		var wob := sin(time * 7.0) * g * 0.2
+		_vgrad(ci, Rect2(Vector2(px - g * 0.75 + wob, py), Vector2(g * 1.5, wy(BY - h) - py + g)), Color(1.0, 0.85, 0.3), Color(1.0, 0.45, 0.08))
+	if hz_p <= 0.001:
+		return
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	var n := 20
+	for i in n + 1:
+		var t := float(i) / n
+		var x := lerpf(far, front, t)
+		var bump := sin(time * 2.0 + i * 1.3) * 0.35 + sin(time * 3.1 + i * 0.7) * 0.2
+		var hh := h * (1.0 - pow(t, 6.0)) + bump
+		pts.append(Vector2(wx(x), wy(BY - maxf(0.3, hh))))
+		cols.append(Color(1.0, 0.82, 0.3))
+	pts.append(Vector2(wx(front), wy(BY)))
+	cols.append(Color(0.85, 0.22, 0.04))
+	pts.append(Vector2(wx(far), wy(BY)))
+	cols.append(Color(0.85, 0.22, 0.04))
+	ci.draw_polygon(pts, cols)
+	# cooling crust
+	for k in 7:
+		var t := fmod(k * 0.17 + time * 0.03, 0.9)
+		var x := lerpf(far, front, t)
+		ci.draw_circle(Vector2(wx(x), wy(BY - h * 0.45 + sin(time + k) * 0.3)), g * (0.6 + 0.3 * sin(time * 1.3 + k)), Color(0.45, 0.1, 0.04, 0.55))
 
 # ---------- drawing ----------
 func _draw_tex_centered(ci: CanvasItem, t: Texture2D, center: Vector2, size: Vector2, rot := 0.0, mod := Color.WHITE) -> void:
@@ -1490,16 +1779,6 @@ func _draw_frame(ci: CanvasItem) -> void:
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# floor ledge over the board
 	ci.draw_texture_rect(gb, Rect2(Vector2(wx(BX - 0.8), wy(BY - 1.4)), Vector2((COLS * CELL + 1.6) * g, g * 1.3)), false)
-	# spikes on the far wall
-	for k in 5:
-		var y = ry + (by - ry) * (0.2 + k * 0.155)
-		var sz := Vector2(g * 5.0, g * 1.9)
-		if facing > 0:
-			ci.draw_texture_rect(tex.spike, Rect2(Vector2(far, y - sz.y / 2), sz), false)
-		else:
-			ci.draw_set_transform(Vector2(far, y), 0.0, Vector2(-1, 1))
-			ci.draw_texture_rect(tex.spike, Rect2(Vector2(0, -sz.y / 2), sz), false)
-			ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# door
 	_draw_door(ci)
 
@@ -1509,7 +1788,8 @@ func _draw_door(ci: CanvasItem) -> void:
 	var bot = wy(BY) - g * 0.2
 	var h = bot - top
 	if door_open:
-		ci.draw_set_transform(Vector2(x - facing * g * 5.0, bot - g * 0.8), PI / 2.0 + facing * 0.12, Vector2.ONE)
+		var side = facing if state == "won" else -facing
+		ci.draw_set_transform(Vector2(x + side * g * 5.0, bot - g * 0.8), PI / 2.0 + side * 0.12, Vector2.ONE)
 		ci.draw_texture_rect(tex.door, Rect2(Vector2(-g * 0.8, -h / 2.0), Vector2(g * 1.6, h)), false, Color(0.85, 0.85, 0.85))
 		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
@@ -1632,6 +1912,14 @@ func _draw_add(ci: CanvasItem) -> void:
 	var ty = wy(room.y0 + 4.5)
 	var fl = 1.0 + sin(hero_t * 11.0) * 0.06
 	_draw_tex_centered(ci, glow_tex, Vector2(tx, ty), Vector2(rw, rw) * 1.1 * fl, 0.0, Color(1.0, 0.55, 0.2, 0.35))
+	if L.get("hazard", "") == "lava" and hz_p > 0.0:
+		var far = room.x0 if facing > 0 else room.x1
+		var mid := wx((far + _hazard_front()) / 2.0)
+		var wdt := absf(_hazard_front() - far) * g
+		_draw_tex_centered(ci, glow_tex, Vector2(mid, wy(BY - 2.0)), Vector2(wdt * 1.6 + g * 8.0, g * 14.0), 0.0, Color(1.0, 0.45, 0.1, 0.55))
+	if L.get("hazard", "") == "golem":
+		var gx := wx(_hazard_front() - facing * 3.6)
+		_draw_tex_centered(ci, glow_tex, Vector2(gx, wy(BY - GOLEM_H * 0.8)), Vector2(g, g) * 9.0, 0.0, Color(0.7, 0.4, 1.0, 0.25 + 0.1 * sin(time * 3.0)))
 	for f in fx:
 		if f.kind == "flash":
 			var p: float = f.life / f.max
@@ -1682,21 +1970,27 @@ func _bot_move() -> void:
 func _run_autotest() -> void:
 	await wait(1.0)
 	await _shot("01_menu")
-	for lv in [0, 2]:
+	for lv in LEVELS.size():
 		start_level(lv)
 		await wait(1.5)
-		await _shot("%02d_level%d_start" % [lv * 10 + 2, lv + 1])
+		await _shot("L%d_a_start" % (lv + 1))
 		var n := 0
 		while state != "won" and state != "lost" and n < 60:
 			if state == "idle":
 				await _bot_move()
 				n += 1
-				if n == 5:
-					await wait(0.4)
-					await _shot("%02d_level%d_play" % [lv * 10 + 3, lv + 1])
+				if n == 10:
+					await wait(1.2)
+					await _shot("L%d_b_chase" % (lv + 1))
 			else:
 				await wait(0.1)
+		if state == "won":
+			await wait(1.9)
+			await _shot("L%d_c_escape" % (lv + 1))
+		else:
+			await wait(1.0)
+			await _shot("L%d_c_caught" % (lv + 1))
 		await wait(2.5)
 		print("AUTOTEST RESULT level=%d state=%s moves_left=%d debris=%d" % [lv + 1, state, moves, grains])
-		await _shot("%02d_level%d_end" % [lv * 10 + 4, lv + 1])
+		await _shot("L%d_d_end" % (lv + 1))
 	get_tree().quit()
