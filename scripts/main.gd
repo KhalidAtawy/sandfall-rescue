@@ -26,15 +26,15 @@ const NCOL := 4
 const LEVELS := [
 	{"name": "The Sand Pit", "theme": "sand", "moves": 22, "shaft": [3, 5], "room": "left", "fill_top": 17,
 		"rubble": [[3, 5, 0, 3], [4, 4, 4, 6]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
-	{"name": "Iron Vault", "theme": "iron", "moves": 26, "shaft": [3, 4], "room": "right", "fill_top": 12,
+	{"name": "Iron Vault", "theme": "iron", "moves": 28, "shaft": [3, 4], "room": "right", "fill_top": 12,
 		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
-	{"name": "Crystal Cave", "theme": "crystal", "moves": 29, "shaft": [5, 6], "room": "left", "fill_top": 15,
+	{"name": "Crystal Cave", "theme": "crystal", "moves": 32, "shaft": [5, 6], "room": "left", "fill_top": 15,
 		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
 	{"name": "Lava Forge", "theme": "emerald", "moves": 28, "shaft": [1, 2], "room": "right", "fill_top": 11,
 		"rubble": [[1, 2, 0, 2], [0, 3, 3, 4], [3, 3, 5, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
-	{"name": "Mummy's Tomb", "theme": "tomb", "moves": 28, "shaft": [2, 3], "room": "right", "fill_top": 13,
+	{"name": "Mummy's Tomb", "theme": "tomb", "moves": 31, "shaft": [2, 3], "room": "right", "fill_top": 13,
 		"rubble": [[2, 3, 0, 3], [3, 5, 4, 5], [5, 6, 6, 8]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
-	{"name": "Cobra Temple", "theme": "temple", "moves": 30, "shaft": [4, 5], "room": "left", "fill_top": 14,
+	{"name": "Cobra Temple", "theme": "temple", "moves": 35, "shaft": [4, 5], "room": "left", "fill_top": 20,
 		"rubble": [[4, 5, 0, 2], [3, 6, 3, 3], [2, 3, 4, 6], [6, 7, 4, 6], [4, 5, 7, 8]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
 ]
 
