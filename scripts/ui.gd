@@ -37,8 +37,8 @@ class Ring extends Control:
 	var p := 100.0
 	var col := Color("e1a64a")
 	func _draw() -> void:
-		var c := size / 2.0
-		var r := minf(size.x, size.y) / 2.0 - 5.0
+		var c = size / 2.0
+		var r = minf(size.x, size.y) / 2.0 - 5.0
 		draw_arc(c, r, 0, TAU, 48, Color(1, 1, 1, 0.14), 9.0, true)
 		if p > 0.0:
 			draw_arc(c, r, -PI / 2.0, -PI / 2.0 + TAU * p / 100.0, 48, Color("f5c542"), 9.0, true)
@@ -52,15 +52,15 @@ class Stars extends Control:
 	func _star(c: Vector2, r: float) -> PackedVector2Array:
 		var pts := PackedVector2Array()
 		for k in 10:
-			var a := -PI / 2.0 + k * PI / 5.0
-			var rr := r if k % 2 == 0 else r * 0.45
+			var a = -PI / 2.0 + k * PI / 5.0
+			var rr = r if k % 2 == 0 else r * 0.45
 			pts.append(c + Vector2(cos(a), sin(a)) * rr)
 		return pts
 	func _draw() -> void:
 		var gap: float = star_size * 1.15
 		var x0: float = size.x / 2.0 - gap
 		for i in 3:
-			var c := Vector2(x0 + i * gap, size.y / 2.0 - (star_size * 0.15 if i == 1 else 0.0))
+			var c = Vector2(x0 + i * gap, size.y / 2.0 - (star_size * 0.15 if i == 1 else 0.0))
 			var r: float = star_size / 2.0 * (1.15 if i == 1 else 1.0)
 			if i < n:
 				draw_colored_polygon(_star(c + Vector2(0, 4), r), Color("9a6410"))
@@ -73,14 +73,14 @@ class LevelTile extends Button:
 	var idx := 0
 	var title := ""
 	var stars := 0
-	var swatch := Color.WHITE
+	var swatch = Color.WHITE
 	var locked := false
 	var f_display: Font
 	var f_body: Font
 	func _draw() -> void:
-		var w := size.x
-		var a := 0.45 if locked else 1.0
-		var num := str(idx + 1)
+		var w = size.x
+		var a = 0.45 if locked else 1.0
+		var num = str(idx + 1)
 		var ns := 64
 		var tw = f_display.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, ns).x
 		draw_string(f_display, Vector2((w - tw) / 2.0, 72), num, HORIZONTAL_ALIGNMENT_LEFT, -1, ns, Color(1, 0.95, 0.86, a))
@@ -90,11 +90,11 @@ class LevelTile extends Button:
 		var sw := Color(swatch.r, swatch.g, swatch.b, a)
 		draw_rect(Rect2(w / 2.0 - 30, 126, 60, 12), sw)
 		for i in 3:
-			var c := Vector2(w / 2.0 + (i - 1) * 34, 166)
+			var c = Vector2(w / 2.0 + (i - 1) * 34, 166)
 			var pts := PackedVector2Array()
 			for k in 10:
-				var ang := -PI / 2.0 + k * PI / 5.0
-				var rr := 14.0 if k % 2 == 0 else 6.3
+				var ang = -PI / 2.0 + k * PI / 5.0
+				var rr = 14.0 if k % 2 == 0 else 6.3
 				pts.append(c + Vector2(cos(ang), sin(ang)) * rr)
 			draw_colored_polygon(pts, Color(0.96, 0.77, 0.26, a) if i < stars else Color(0.36, 0.31, 0.53, a))
 		if locked:
@@ -104,7 +104,7 @@ class LevelTile extends Button:
 
 class MenuIcon extends Button:
 	func _draw() -> void:
-		var c := size / 2.0
+		var c = size / 2.0
 		for k in 4:
 			var o := Vector2(-15 if k % 2 == 0 else 3, -15 if k < 2 else 3)
 			draw_rect(Rect2(c + o, Vector2(12, 12)), Color("f5c542"))
@@ -147,7 +147,7 @@ func build() -> void:
 	mv.add_theme_constant_override("separation", -8)
 	moves_label = _label("22", font_display, 52, INK)
 	moves_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var ml := _label("MOVES", font_black, 18, INK_SOFT)
+	var ml = _label("MOVES", font_black, 18, INK_SOFT)
 	ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mv.add_child(moves_label)
 	mv.add_child(ml)
@@ -183,7 +183,7 @@ func build() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(center)
 	card = PanelContainer.new()
-	var cs := _box(PANEL_2, GOLD_DEEP, 44, 6, 34)
+	var cs = _box(PANEL_2, GOLD_DEEP, 44, 6, 34)
 	cs.bg_color = Color("2b2050")
 	cs.shadow_color = Color(0, 0, 0, 0.5)
 	cs.shadow_size = 30
@@ -197,7 +197,7 @@ func build() -> void:
 
 func layout(vs: Vector2, safe: Vector2) -> void:
 	vsize = vs
-	var top := safe.x + 18.0
+	var top = safe.x + 18.0
 	var pad := 22.0
 	hud.position = Vector2(0, 0)
 	hud.size = Vector2(vs.x, top + HUD_H)
@@ -205,7 +205,7 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	menu_btn.size = Vector2(78, 78)
 	lvl_label.position = Vector2(pad + 96, top + 6)
 	name_label.position = Vector2(pad + 98, top + 54)
-	var right := vs.x - pad
+	var right = vs.x - pad
 	pct_label.position = Vector2(right - 88, top + 26)
 	ring.position = Vector2(right - 88 - 82, top + 12)
 	ring.size = Vector2(76, 76)
@@ -213,7 +213,7 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	moves_panel.custom_minimum_size = Vector2(120, 96)
 	moves_panel.size = Vector2(120, 96)
 	name_label.size = Vector2(maxf(60.0, moves_panel.position.x - name_label.position.x - 12), 34)
-	var tw := minf(vs.x - 60.0, 600.0)
+	var tw = minf(vs.x - 60.0, 600.0)
 	toast_panel.custom_minimum_size = Vector2(tw, 0)
 	toast_panel.size = Vector2(tw, 0)
 	toast_panel.position = Vector2((vs.x - tw) / 2.0, vs.y * 0.42)
@@ -253,7 +253,7 @@ func _show_card() -> void:
 	overlay.modulate.a = 0.0
 	card.pivot_offset = card.size / 2.0
 	card.scale = Vector2(0.86, 0.86)
-	var t := create_tween().set_parallel(true)
+	var t = create_tween().set_parallel(true)
 	t.tween_property(overlay, "modulate:a", 1.0, 0.2)
 	t.tween_property(card, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await get_tree().process_frame
@@ -264,10 +264,10 @@ func hide_overlay() -> void:
 
 func show_menu() -> void:
 	_clear_card()
-	var t := _label("Sandfall Rescue", font_display, 76, GOLD)
+	var t = _label("Sandfall Rescue", font_display, 76, GOLD)
 	_heading(t)
 	card_box.add_child(t)
-	var d := _label("Zaki is holding the door shut. Match gems beside the debris to drain it before your moves run out.", font_body, 28, INK_SOFT)
+	var d = _label("Zaki is holding the door shut. Match gems beside the debris to drain it before your moves run out.", font_body, 28, INK_SOFT)
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
@@ -276,7 +276,7 @@ func show_menu() -> void:
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 18)
 	grid.add_theme_constant_override("v_separation", 18)
-	var tile_w := (card.custom_minimum_size.x - 68 - 18) / 2.0
+	var tile_w = (card.custom_minimum_size.x - 68 - 18) / 2.0
 	for i in game.LEVELS.size():
 		var lt := LevelTile.new()
 		lt.idx = i
@@ -296,7 +296,7 @@ func show_menu() -> void:
 		grid.add_child(lt)
 	card_box.add_child(grid)
 	if game.state == "paused":
-		var b := _button("Back to game", "ghost")
+		var b = _button("Back to game", "ghost")
 		b.pressed.connect(func():
 			game.play("click")
 			game.resume())
@@ -305,7 +305,7 @@ func show_menu() -> void:
 
 func show_win(stars: int, moves: int, title: String, has_next: bool) -> void:
 	_clear_card()
-	var t := _label("Zaki is safe!", font_display, 66, GOLD)
+	var t = _label("Zaki is safe!", font_display, 66, GOLD)
 	_heading(t)
 	card_box.add_child(t)
 	var st := Stars.new()
@@ -322,23 +322,23 @@ func show_win(stars: int, moves: int, title: String, has_next: bool) -> void:
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card_box.add_child(d)
 	if has_next:
-		var nb := _button("Next level", "gold")
+		var nb = _button("Next level", "gold")
 		nb.pressed.connect(func():
 			game.play("click")
 			game.start_level(game.level_idx + 1))
 		card_box.add_child(nb)
 	else:
-		var e := _label("You cleared every chamber. More levels are on the way.", font_body, 28, INK_SOFT)
+		var e = _label("You cleared every chamber. More levels are on the way.", font_body, 28, INK_SOFT)
 		e.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		e.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
 		card_box.add_child(e)
-	var ab := _button("Play again", "teal")
+	var ab = _button("Play again", "teal")
 	ab.pressed.connect(func():
 		game.play("click")
 		game.start_level(game.level_idx))
 	card_box.add_child(ab)
-	var lb := _button("All levels", "ghost")
+	var lb = _button("All levels", "ghost")
 	lb.pressed.connect(func():
 		game.play("click")
 		game.state = "menu"
@@ -348,24 +348,24 @@ func show_win(stars: int, moves: int, title: String, has_next: bool) -> void:
 
 func show_lose(left: int, can_extra: bool) -> void:
 	_clear_card()
-	var t := _label("The door gave way!", font_display, 62, GOLD)
+	var t = _label("The door gave way!", font_display, 62, GOLD)
 	_heading(t)
 	card_box.add_child(t)
-	var d := _label("%d%% of the debris was still left." % left, font_body, 30, INK_SOFT)
+	var d = _label("%d%% of the debris was still left." % left, font_body, 30, INK_SOFT)
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card_box.add_child(d)
 	if can_extra:
-		var mb := _button("+5 moves", "gold")
+		var mb = _button("+5 moves", "gold")
 		mb.pressed.connect(func():
 			game.play("click")
 			game.plus_five())
 		card_box.add_child(mb)
-	var rb := _button("Try again", "teal")
+	var rb = _button("Try again", "teal")
 	rb.pressed.connect(func():
 		game.play("click")
 		game.start_level(game.level_idx))
 	card_box.add_child(rb)
-	var lb := _button("All levels", "ghost")
+	var lb = _button("All levels", "ghost")
 	lb.pressed.connect(func():
 		game.play("click")
 		game.state = "menu"
@@ -405,11 +405,11 @@ func _box(bg: Color, border: Color, radius: int, bw: int, pad := 0) -> StyleBoxF
 	return s
 
 func _style_button(b: Button, bg: Color, border: Color, radius: int) -> void:
-	var n := _box(bg, border, radius, 4)
-	var h := _box(bg.lightened(0.08), border, radius, 4)
-	var p := _box(bg.darkened(0.15), border, radius, 4)
-	var dsb := _box(bg.darkened(0.25), border.darkened(0.3), radius, 4)
-	var fo := _box(Color(0, 0, 0, 0), Color("2fc4b2"), radius, 4)
+	var n = _box(bg, border, radius, 4)
+	var h = _box(bg.lightened(0.08), border, radius, 4)
+	var p = _box(bg.darkened(0.15), border, radius, 4)
+	var dsb = _box(bg.darkened(0.25), border.darkened(0.3), radius, 4)
+	var fo = _box(Color(0, 0, 0, 0), Color("2fc4b2"), radius, 4)
 	fo.draw_center = false
 	b.add_theme_stylebox_override("normal", n)
 	b.add_theme_stylebox_override("hover", h)
@@ -439,7 +439,7 @@ func _button(text: String, kind: String) -> Button:
 		b.add_theme_color_override("font_pressed_color", INK)
 		return b
 	for st in ["normal", "hover", "pressed", "focus"]:
-		var s := _box(bg if st != "pressed" else bg.darkened(0.1), edge, 28, 0)
+		var s = _box(bg if st != "pressed" else bg.darkened(0.1), edge, 28, 0)
 		s.border_width_bottom = 8 if st != "pressed" else 3
 		s.border_color = edge
 		if st == "hover":

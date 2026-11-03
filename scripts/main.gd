@@ -40,7 +40,7 @@ const THEMES := {
 const GEM_COLORS := [Color("ff5a6e"), Color("3a8dff"), Color("ffc21a"), Color("36d27d")]
 
 class Gem:
-	var kind := "gem"     # gem, rocket, bomb, light
+	var kind = "gem"     # gem, rocket, bomb, light
 	var color := 0
 	var dir := "h"
 	var x := 0.0
@@ -72,7 +72,7 @@ var mask := PackedByteArray()
 var grains := 0
 var grains0 := 1
 var moves := 0
-var state := "menu"     # menu, idle, busy, paused, won, lost
+var state = "menu"     # menu, idle, busy, paused, won, lost
 var shaft := {}
 var room := {}
 var door_col := 0
@@ -89,9 +89,9 @@ var sand_sleep := false
 var sand_dirty := true
 var flip := 0
 var ax0 := 0
-var ax1 := SW
+var ax1 = SW
 var ay0 := 0
-var ay1 := SH - 1
+var ay1 = SH - 1
 var hero_t := 0.0
 var hero_strain := 0.0
 var hero_pose := "push"
@@ -233,12 +233,12 @@ func save_progress() -> void:
 
 # ---------- layout ----------
 func _layout() -> void:
-	var vs := get_viewport_rect().size
-	var safe := _safe_insets()
+	var vs = get_viewport_rect().size
+	var safe = _safe_insets()
 	var top: float = safe.x + Ui.HUD_H
-	var bottom := safe.y + 12.0
+	var bottom = safe.y + 12.0
 	var avail_h: float = vs.y - top - bottom
-	var avail_w := vs.x - 20.0
+	var avail_w = vs.x - 20.0
 	g = maxf(2.0, minf(avail_w / SW, avail_h / SH))
 	ox = (vs.x - SW * g) / 2.0
 	oy = top + maxf(0.0, (avail_h - SH * g) / 2.0)
@@ -250,14 +250,14 @@ func _layout() -> void:
 	frame_layer.queue_redraw()
 
 func _safe_insets() -> Vector2:
-	var vs := get_viewport_rect().size
-	var ws := DisplayServer.window_get_size()
+	var vs = get_viewport_rect().size
+	var ws = DisplayServer.window_get_size()
 	if ws.y <= 0:
 		return Vector2.ZERO
-	var k := vs.y / float(ws.y)
-	var sa := DisplayServer.get_display_safe_area()
-	var top := maxf(0.0, sa.position.y * k)
-	var bottom := maxf(0.0, (ws.y - sa.end.y) * k)
+	var k = vs.y / float(ws.y)
+	var sa = DisplayServer.get_display_safe_area()
+	var top = maxf(0.0, sa.position.y * k)
+	var bottom = maxf(0.0, (ws.y - sa.end.y) * k)
 	if top > vs.y * 0.2 or bottom > vs.y * 0.2:
 		return Vector2.ZERO
 	return Vector2(top, bottom)
@@ -349,9 +349,9 @@ func start_level(i: int) -> void:
 	ui.toast(L.tip)
 
 func _compute_active_region() -> void:
-	var minx := SW
+	var minx = SW
 	var maxx := 0
-	var miny := SH
+	var miny = SH
 	var maxy := 0
 	for y in SH:
 		for x in SW:
@@ -376,7 +376,7 @@ func _fill_board() -> void:
 			for c in COLS:
 				if is_rub(c, r):
 					continue
-				var k := randi() % NCOL
+				var k = randi() % NCOL
 				var guard := 0
 				while guard < 20 and ((color_at(c - 1, r) == k and color_at(c - 2, r) == k) or (color_at(c, r - 1) == k and color_at(c, r - 2) == k)):
 					k = randi() % NCOL
@@ -413,11 +413,11 @@ func find_clusters() -> Array:
 	for r in ROWS:
 		var c := 0
 		while c < COLS:
-			var k := color_at(c, r)
+			var k = color_at(c, r)
 			if k < 0:
 				c += 1
 				continue
-			var e := c
+			var e = c
 			while color_at(e + 1, r) == k:
 				e += 1
 			if e - c >= 2:
@@ -429,11 +429,11 @@ func find_clusters() -> Array:
 	for c in COLS:
 		var r := 0
 		while r < ROWS:
-			var k := color_at(c, r)
+			var k = color_at(c, r)
 			if k < 0:
 				r += 1
 				continue
-			var e := r
+			var e = r
 			while color_at(c, e + 1) == k:
 				e += 1
 			if e - r >= 2:
@@ -485,7 +485,7 @@ func _color_sw(x: int, y: int, sw: Array) -> int:
 	return color_at(x, y)
 
 func _line_len(sw: Array, c: int, r: int, dx: int, dy: int) -> int:
-	var k := _color_sw(c, r, sw)
+	var k = _color_sw(c, r, sw)
 	var n := 1
 	var s := 1
 	while _color_sw(c + dx * s, r + dy * s, sw) == k:
@@ -506,8 +506,8 @@ func all_moves() -> Array:
 				var r2: int = r + d.y
 				if not in_b(c2, r2):
 					continue
-				var a := color_at(c, r)
-				var b := color_at(c2, r2)
+				var a = color_at(c, r)
+				var b = color_at(c2, r2)
 				if a < 0 or b < 0 or a == b:
 					continue
 				var sw = [c, r, c2, r2, a, b]
@@ -516,7 +516,7 @@ func all_moves() -> Array:
 	return out
 
 func find_move() -> Array:
-	var ms := all_moves()
+	var ms = all_moves()
 	return ms[0] if not ms.is_empty() else []
 
 func has_special() -> Vector2i:
@@ -531,7 +531,7 @@ func most_common_color() -> int:
 	var n = [0, 0, 0, 0]
 	for r in ROWS:
 		for c in COLS:
-			var k := color_at(c, r)
+			var k = color_at(c, r)
 			if k >= 0:
 				n[k] += 1
 	return n.find(n.max())
@@ -548,7 +548,7 @@ func _ease(e: String, t: float) -> float:
 	match e:
 		"back":
 			var s := 1.7
-			var u := t - 1.0
+			var u = t - 1.0
 			return u * u * ((s + 1.0) * u + s) + 1.0
 		"in":
 			return t * t
@@ -565,15 +565,15 @@ func later(t: float, fn: Callable) -> void:
 # ---------- effects ----------
 func burst(x: float, y: float, col: Color, n := 10, spd := 1.0) -> void:
 	for i in n:
-		var a := randf() * TAU
-		var v := (40.0 + randf() * 160.0) * spd * g / 6.0
+		var a = randf() * TAU
+		var v = (40.0 + randf() * 160.0) * spd * g / 6.0
 		parts.append({"x": x, "y": y, "vx": cos(a) * v, "vy": sin(a) * v - 60.0 * g / 6.0, "life": 0.0,
 			"max": 0.5 + randf() * 0.4, "col": col, "size": g * (0.5 + randf() * 0.7), "grav": 500.0 * g / 6.0, "kind": "dot"})
 
 func sparkle(x: float, y: float, n := 4) -> void:
 	for i in n:
-		var a := randf() * TAU
-		var v := (30.0 + randf() * 90.0) * g / 6.0
+		var a = randf() * TAU
+		var v = (30.0 + randf() * 90.0) * g / 6.0
 		parts.append({"x": x, "y": y, "vx": cos(a) * v, "vy": sin(a) * v, "life": 0.0, "max": 0.6,
 			"col": Color("fff6c9"), "size": g * 1.1, "grav": 0.0, "kind": "star"})
 
@@ -609,8 +609,8 @@ func damage_rubble(id: int) -> void:
 			grains -= 1
 			hit += 1
 			if randf() < 0.4:
-				var a := -PI / 2.0 + (randf() - 0.5) * 2.2
-				var sp := (120.0 + randf() * 260.0) * g / 6.0
+				var a = -PI / 2.0 + (randf() - 0.5) * 2.2
+				var sp = (120.0 + randf() * 260.0) * g / 6.0
 				parts.append({"x": wx(x + 0.5), "y": wy(y + 0.5), "vx": cos(a) * sp, "vy": sin(a) * sp, "life": 0.0,
 					"max": 0.7 + randf() * 0.4, "col": theme.grains[v - 1], "size": g * 1.4, "grav": 900.0 * g / 6.0, "kind": "grain"})
 	if hit > 0:
@@ -630,16 +630,16 @@ func _update_hud() -> void:
 # ---------- gravity / refill ----------
 func collapse() -> void:
 	for c in COLS:
-		var r := ROWS - 1
+		var r = ROWS - 1
 		while r >= 0:
 			if is_rub(c, r):
 				r -= 1
 				continue
-			var bottom := r
+			var bottom = r
 			while r >= 0 and not is_rub(c, r):
 				r -= 1
-			var top := r + 1
-			var w := bottom
+			var top = r + 1
+			var w = bottom
 			for y in range(bottom, top - 1, -1):
 				var m = grid[y][c]
 				if m != null:
@@ -649,9 +649,9 @@ func collapse() -> void:
 						m.ty = w
 						m.falling = true
 					w -= 1
-			var missing := w - top + 1
+			var missing = w - top + 1
 			for y in range(w, top - 1, -1):
-				var m := _new_gem(c, y, randi() % NCOL)
+				var m = _new_gem(c, y, randi() % NCOL)
 				grid[y][c] = m
 				if top == 0:
 					m.y = y - missing - 0.4
@@ -720,7 +720,7 @@ func _resolve_clusters(cls: Array) -> void:
 			for rn in cl.runs:
 				if rn.cells.size() == 4:
 					dir = "v" if rn.h else "h"
-		var spawn := _pick_spawn(cl) if kind != "" else -1
+		var spawn = _pick_spawn(cl) if kind != "" else -1
 		for id in cl.cells:
 			var c: int = id % COLS
 			var r: int = id / COLS
@@ -737,8 +737,8 @@ func _resolve_clusters(cls: Array) -> void:
 			var m: Gem = grid[spawn / COLS][spawn % COLS]
 			m.dying = true
 			tween(m, {"scale": 0.0}, 0.12)
-			var k := kind
-			var dd := dir
+			var k = kind
+			var dd = dir
 			later(0.12, func():
 				m.kind = k
 				m.dir = dd
@@ -760,7 +760,7 @@ func _resolve_clusters(cls: Array) -> void:
 
 func cascade() -> void:
 	for _guard in 30:
-		var cls := find_clusters()
+		var cls = find_clusters()
 		if cls.is_empty():
 			break
 		await _resolve_clusters(cls)
@@ -771,12 +771,12 @@ func _area_for(s: Dictionary) -> Array:
 	var out = []
 	var c: int = s.c
 	var r: int = s.r
-	var row := func(y: int, from: int) -> void:
+	var row = func(y: int, from: int) -> void:
 		if y < 0 or y >= ROWS:
 			return
 		for x in COLS:
 			out.append([x, y, absf(x - from) * 0.032])
-	var col := func(x: int, from: int) -> void:
+	var col = func(x: int, from: int) -> void:
 		if x < 0 or x >= COLS:
 			return
 		for y in ROWS:
@@ -814,7 +814,7 @@ func _area_for(s: Dictionary) -> Array:
 func _spawn_fx(s: Dictionary) -> void:
 	var x = cell_cx(s.c)
 	var y = cell_cy(s.r)
-	var s2 := CELL * g
+	var s2 = CELL * g
 	var k: String = s.kind
 	if k == "rocket" or k == "cross" or k == "big":
 		var dirs = []
@@ -845,7 +845,7 @@ func detonate(seeds: Array) -> void:
 	var hit := {}
 	var rub := {}
 	var triggered := {}
-	var q := seeds.duplicate()
+	var q = seeds.duplicate()
 	for s in seeds:
 		if s.has("src"):
 			triggered[s.src] = true
@@ -860,7 +860,7 @@ func detonate(seeds: Array) -> void:
 		for a in _area_for(s):
 			var c: int = a[0]
 			var r: int = a[1]
-			var id := r * COLS + c
+			var id = r * COLS + c
 			var delay: float = s.delay + a[2]
 			if is_rub(c, r):
 				if not rub.has(id) or rub[id] > delay:
@@ -872,8 +872,8 @@ func detonate(seeds: Array) -> void:
 			if s.kind == "light":
 				var x0 = cell_cx(s.c)
 				var y0 = cell_cy(s.r)
-				var x1 := cell_cx(c)
-				var y1 := cell_cy(r)
+				var x1 = cell_cx(c)
+				var y1 = cell_cy(r)
 				later(delay - 0.06, func(): fx.append({"kind": "bolt", "x0": x0, "y0": y0, "x1": x1, "y1": y1, "life": 0.0, "max": 0.3}))
 			if not hit.has(id) or hit[id] > delay:
 				hit[id] = delay
@@ -919,13 +919,13 @@ func try_swap(a: Vector2i, b: Vector2i) -> void:
 		if sa and sb:
 			var kinds = [A.kind, B.kind]
 			kinds.sort()
-			var key := "%s+%s" % kinds
+			var key = "%s+%s" % kinds
 			if key == "light+light":
 				seeds = [{"c": b.x, "r": b.y, "kind": "all", "delay": 0.0, "src": A}, {"c": a.x, "r": a.y, "kind": "single", "delay": 0.0, "src": B}]
 			elif A.kind == "light" or B.kind == "light":
 				var other: Gem = B if A.kind == "light" else A
 				var lt: Gem = A if A.kind == "light" else B
-				var k := most_common_color()
+				var k = most_common_color()
 				var conv = []
 				for y in ROWS:
 					for x in COLS:
@@ -1006,7 +1006,7 @@ func end_turn() -> void:
 		return
 	if moves <= 0:
 		state = "busy"
-		var t0 := time
+		var t0 = time
 		while time - t0 < 1.6 and sand_moved > 0:
 			await wait(0.1)
 		if grains <= win_threshold():
@@ -1055,8 +1055,8 @@ func _win() -> void:
 			sand[i] = 0
 			grains -= 1
 			sand_dirty = true
-			var x := i % SW
-			var y := i / SW
+			var x = i % SW
+			var y = i / SW
 			parts.append({"x": wx(x + 0.5), "y": wy(y + 0.5), "vx": (randf() - 0.5) * 200.0 * g / 6.0, "vy": (-200.0 - randf() * 200.0) * g / 6.0,
 				"life": 0.0, "max": 0.8, "col": theme.grains[v - 1], "size": g * 1.4, "grav": 900.0 * g / 6.0, "kind": "grain"})
 		)
@@ -1069,7 +1069,7 @@ func _win() -> void:
 	buzz(60)
 	await collapse()
 	var ratio = float(moves) / float(L.moves)
-	var stars := 3 if ratio >= 0.3 else (2 if ratio >= 0.12 else 1)
+	var stars = 3 if ratio >= 0.3 else (2 if ratio >= 0.12 else 1)
 	if stars > int(progress.best[level_idx]):
 		progress.best[level_idx] = stars
 		save_progress()
@@ -1098,7 +1098,7 @@ func _lose() -> void:
 	await wait(1.0)
 	play("lose")
 	await wait(0.8)
-	var left := ceili(grains * 100.0 / grains0) if grains > 0 else 0
+	var left = ceili(grains * 100.0 / grains0) if grains > 0 else 0
 	ui.show_lose(left, not extra_used)
 
 func plus_five() -> void:
@@ -1174,7 +1174,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			if down_cell.x < 0:
 				return
-			var d := down_cell
+			var d = down_cell
 			down_cell = Vector2i(-1, -1)
 			if down_moved or state != "idle":
 				return
@@ -1191,12 +1191,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.index != 0 or down_cell.x < 0 or down_moved or state != "idle":
 			return
 		var dv: Vector2 = event.position - down_pos
-		var th := CELL * g * 0.35
+		var th = CELL * g * 0.35
 		if absf(dv.x) < th and absf(dv.y) < th:
 			return
 		down_moved = true
-		var c := down_cell
-		var t := Vector2i(c.x + int(signf(dv.x)), c.y) if absf(dv.x) > absf(dv.y) else Vector2i(c.x, c.y + int(signf(dv.y)))
+		var c = down_cell
+		var t = Vector2i(c.x + int(signf(dv.x)), c.y) if absf(dv.x) > absf(dv.y) else Vector2i(c.x, c.y + int(signf(dv.y)))
 		if in_b(t.x, t.y) and not is_rub(t.x, t.y) and grid[t.y][t.x] != null:
 			try_swap(c, t)
 
@@ -1204,10 +1204,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _sand_step() -> int:
 	var moved := 0
 	flip ^= 1
-	var w := ax1 - ax0
+	var w = ax1 - ax0
 	for y in range(ay1 - 1, ay0 - 1, -1):
 		var base: int = y * SW
-		var ltr := ((y + flip) & 1) == 1
+		var ltr = ((y + flip) & 1) == 1
 		for k in w:
 			var x: int = (ax0 + k) if ltr else (ax1 - 1 - k)
 			var i: int = base + x
@@ -1220,9 +1220,9 @@ func _sand_step() -> int:
 				sand[i] = 0
 				moved += 1
 				continue
-			var d := 1 if (randi() & 1) == 1 else -1
+			var d = 1 if (randi() & 1) == 1 else -1
 			for _t in 2:
-				var nx := x + d
+				var nx = x + d
 				if nx >= ax0 and nx < ax1:
 					var j: int = b + d
 					if mask[j] == 1 and sand[j] == 0 and mask[i + d] == 1 and sand[i + d] == 0:
@@ -1246,7 +1246,7 @@ func _process(dt: float) -> void:
 	dt = minf(dt, 0.033)
 	time += dt
 	# tweens
-	var i := tweens.size() - 1
+	var i = tweens.size() - 1
 	while i >= 0:
 		var tw: Dictionary = tweens[i]
 		tw.t += dt
@@ -1287,7 +1287,7 @@ func _process(dt: float) -> void:
 		var steps := 0
 		while sand_acc >= 1.0 and steps < 3:
 			if not sand_sleep:
-				var n := _sand_step()
+				var n = _sand_step()
 				mv += n
 				if n == 0:
 					sand_sleep = true
@@ -1342,11 +1342,11 @@ func _process(dt: float) -> void:
 		var target = float(n) / float((room.y1 - room.y0) * 2)
 		hero_strain += (target - hero_strain) * minf(1.0, dt * 4.0)
 	if state == "idle" and time - last_input > 5.5 and hint.is_empty():
-		var mv := find_move()
+		var mv = find_move()
 		if not mv.is_empty():
 			hint = mv
 		else:
-			var sp := has_special()
+			var sp = has_special()
 			if sp.x >= 0:
 				hint = [sp]
 	shake = maxf(0.0, shake - dt)
@@ -1363,12 +1363,12 @@ func _process(dt: float) -> void:
 func _place_hero() -> void:
 	if room.is_empty() or hero == null:
 		return
-	var tname := "hero_" + hero_pose
+	var tname = "hero_" + hero_pose
 	if hero.texture != tex[tname]:
 		hero.texture = tex[tname]
-	var h := 15.5 * g
-	var s := h / 512.0
-	var door_x := wx(door_col) if facing > 0 else wx(door_col + 1)
+	var h = 15.5 * g
+	var s = h / 512.0
+	var door_x = wx(door_col) if facing > 0 else wx(door_col + 1)
 	var bob := 0.0
 	var lean := 0.0
 	match hero_pose:
@@ -1382,7 +1382,7 @@ func _place_hero() -> void:
 	hero.scale = Vector2(s, s)
 	hero.flip_h = facing < 0
 	hero.rotation = lean
-	var cx := door_x - facing * 5.6 * g
+	var cx = door_x - facing * 5.6 * g
 	if hero_pose != "push":
 		cx = door_x - facing * 8.0 * g
 	hero.position = Vector2(cx, wy(BY) - h / 2.0 + bob + g * 0.3)
@@ -1403,8 +1403,8 @@ func _vgrad(ci: CanvasItem, r: Rect2, top: Color, bottom: Color) -> void:
 func _draw_bg(ci: CanvasItem) -> void:
 	if L.is_empty():
 		return
-	var W := SW * g
-	var H := SH * g
+	var W = SW * g
+	var H = SH * g
 	var world := Rect2(ox, oy, W, H)
 	var wall: Texture2D = tex["wall_" + L.theme]
 	ci.draw_texture_rect(wall, world, false)
@@ -1427,14 +1427,14 @@ func _draw_bg(ci: CanvasItem) -> void:
 	sb.border_color = Color("2a356b")
 	sb.set_border_width_all(int(maxf(1.0, g * 0.3)))
 	ci.draw_style_box(sb, Rect2(wx(BX - 0.8), wy(BY - 0.8), (COLS * CELL + 1.6) * g, (ROWS * CELL + 1.6) * g))
-	var s := CELL * g
+	var s = CELL * g
 	for r in ROWS:
 		for c in COLS:
-			var p := Vector2(wx(BX + c * CELL), wy(BY + r * CELL))
+			var p = Vector2(wx(BX + c * CELL), wy(BY + r * CELL))
 			if is_rub(c, r):
 				ci.draw_rect(Rect2(p, Vector2(s, s)), theme.recess[0])
 				continue
-			var shade := Color(1, 1, 1) if (r + c) % 2 == 0 else Color(0.9, 0.88, 0.85)
+			var shade = Color(1, 1, 1) if (r + c) % 2 == 0 else Color(0.9, 0.88, 0.85)
 			ci.draw_texture_rect(tex.tile, Rect2(p + Vector2(s, s) * 0.02, Vector2(s, s) * 0.96), false, shade)
 
 func _draw_back(ci: CanvasItem) -> void:
@@ -1447,12 +1447,12 @@ func _draw_back(ci: CanvasItem) -> void:
 	var ty = wy(room.y0 + 6)
 	var tsz := Vector2(g * 3.0, g * 6.0)
 	ci.draw_texture_rect(tex.torch, Rect2(Vector2(tx, ty) - Vector2(tsz.x / 2, tsz.y * 0.35), tsz), false)
-	var fl := 1.0 + sin(hero_t * 17.0) * 0.12 + sin(hero_t * 7.0) * 0.08
+	var fl = 1.0 + sin(hero_t * 17.0) * 0.12 + sin(hero_t * 7.0) * 0.08
 	var fpts := PackedVector2Array()
 	var fc := Vector2(tx, ty - g * 1.4)
 	for k in 16:
-		var a := TAU * k / 16.0
-		var rr := g * (0.95 + 0.7 * maxf(0.0, -sin(a)) * fl)
+		var a = TAU * k / 16.0
+		var rr = g * (0.95 + 0.7 * maxf(0.0, -sin(a)) * fl)
 		fpts.append(fc + Vector2(cos(a) * g * 0.95, sin(a) * rr))
 	ci.draw_colored_polygon(fpts, Color("ff8a1a"))
 	ci.draw_circle(fc + Vector2(0, g * 0.3), g * 0.5, Color("ffe27a"))
@@ -1461,11 +1461,11 @@ func _draw_frame(ci: CanvasItem) -> void:
 	if L.is_empty():
 		return
 	var gb: Texture2D = tex.goldbar
-	var t := g * 1.4
+	var t = g * 1.4
 	var sx0 = wx(shaft.x0)
 	var sx1 = wx(shaft.x1)
 	var sy = wy(shaft.y0)
-	var by := wy(BY)
+	var by = wy(BY)
 	# shaft sides (vertical bars drawn rotated)
 	for x in [sx0 - t * 0.5, sx1 + t * 0.5]:
 		ci.draw_set_transform(Vector2(x, (sy + by) / 2.0), PI / 2.0, Vector2.ONE)
@@ -1477,7 +1477,7 @@ func _draw_frame(ci: CanvasItem) -> void:
 	var rx1 = wx(room.x1)
 	var ry = wy(room.y0)
 	ci.draw_texture_rect(gb, Rect2(Vector2(rx0 - t * 0.3, ry - t * 0.5), Vector2(rx1 - rx0 + t * 0.6, t * 0.8)), false)
-	var far := rx0 if facing > 0 else rx1
+	var far = rx0 if facing > 0 else rx1
 	ci.draw_set_transform(Vector2(far, (ry + by) / 2.0), PI / 2.0, Vector2.ONE)
 	ci.draw_texture_rect(gb, Rect2(Vector2(-(by - ry) / 2.0, -t * 0.4), Vector2(by - ry, t * 0.8)), false)
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -1485,7 +1485,7 @@ func _draw_frame(ci: CanvasItem) -> void:
 	ci.draw_texture_rect(gb, Rect2(Vector2(wx(BX - 0.8), wy(BY - 1.4)), Vector2((COLS * CELL + 1.6) * g, g * 1.3)), false)
 	# spikes on the far wall
 	for k in 5:
-		var y := ry + (by - ry) * (0.2 + k * 0.155)
+		var y = ry + (by - ry) * (0.2 + k * 0.155)
 		var sz := Vector2(g * 5.0, g * 1.9)
 		if facing > 0:
 			ci.draw_texture_rect(tex.spike, Rect2(Vector2(far, y - sz.y / 2), sz), false)
@@ -1497,16 +1497,16 @@ func _draw_frame(ci: CanvasItem) -> void:
 	_draw_door(ci)
 
 func _draw_door(ci: CanvasItem) -> void:
-	var x := wx(door_col + 0.5)
+	var x = wx(door_col + 0.5)
 	var top = wy(room.y0) + g * 0.8
-	var bot := wy(BY) - g * 0.2
-	var h := bot - top
+	var bot = wy(BY) - g * 0.2
+	var h = bot - top
 	if door_open:
 		ci.draw_set_transform(Vector2(x - facing * g * 5.0, bot - g * 0.8), PI / 2.0 + facing * 0.12, Vector2.ONE)
 		ci.draw_texture_rect(tex.door, Rect2(Vector2(-g * 0.8, -h / 2.0), Vector2(g * 1.6, h)), false, Color(0.85, 0.85, 0.85))
 		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
-	var bulge := -facing * hero_strain * g * 0.6 + sin(hero_t * 30.0) * hero_strain * g * 0.12
+	var bulge = -facing * hero_strain * g * 0.6 + sin(hero_t * 30.0) * hero_strain * g * 0.12
 	ci.draw_set_transform(Vector2(x + bulge, (top + bot) / 2.0), -facing * hero_strain * 0.03, Vector2.ONE)
 	ci.draw_texture_rect(tex.door, Rect2(Vector2(-g * 0.9, -h / 2.0), Vector2(g * 1.8, h)), false)
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -1526,10 +1526,10 @@ func _gem_tex(m: Gem) -> Texture2D:
 func _draw_gems(ci: CanvasItem) -> void:
 	if grid.is_empty():
 		return
-	var S := CELL * g * 0.92
-	var board_top := wy(BY) - CELL * g * 0.35
+	var S = CELL * g * 0.92
+	var board_top = wy(BY) - CELL * g * 0.35
 	if selected.x >= 0:
-		var c := Vector2(cell_cx(selected.x), cell_cy(selected.y))
+		var c = Vector2(cell_cx(selected.x), cell_cy(selected.y))
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color(1, 0.96, 0.75, 0.25)
 		sb.border_color = Color("fff6c9")
@@ -1547,11 +1547,11 @@ func _draw_gems(ci: CanvasItem) -> void:
 				for k in hint.size():
 					var hc: Vector2i = hint[k]
 					if hc.x == c and hc.y == r:
-						var wv := sin(time * 14.0) * g * 0.6
+						var wv = sin(time * 14.0) * g * 0.6
 						if hint.size() == 2:
 							var a: Vector2i = hint[0]
 							var b: Vector2i = hint[1]
-							var sgn := 1.0 if k == 0 else -1.0
+							var sgn = 1.0 if k == 0 else -1.0
 							x += (b.x - a.x) * wv * sgn
 							y += (b.y - a.y) * wv * sgn
 						else:
@@ -1569,13 +1569,13 @@ func _draw_gems(ci: CanvasItem) -> void:
 			if m.kind == "light":
 				rot = time * 0.8
 			var size := Vector2(s * sx, s * sy)
-			var center := Vector2(x, y + (s - size.y) / 2.0)
+			var center = Vector2(x, y + (s - size.y) / 2.0)
 			# soft contact shadow
 			ci.draw_circle(center + Vector2(0, s * 0.36), s * 0.32, Color(0, 0, 0, 0.18 * m.scale))
 			_draw_tex_centered(ci, _gem_tex(m), center, size, rot)
 
 func _draw_fx(ci: CanvasItem) -> void:
-	var S := CELL * g * 0.8
+	var S = CELL * g * 0.8
 	for f in fx:
 		var p: float = f.life / f.max
 		match f.kind:
@@ -1623,7 +1623,7 @@ func _draw_add(ci: CanvasItem) -> void:
 	var rw: float = (room.x1 - room.x0) * g
 	var tx: float = rx + rw * (0.22 if facing > 0 else 0.78)
 	var ty = wy(room.y0 + 4.5)
-	var fl := 1.0 + sin(hero_t * 11.0) * 0.06
+	var fl = 1.0 + sin(hero_t * 11.0) * 0.06
 	_draw_tex_centered(ci, glow_tex, Vector2(tx, ty), Vector2(rw, rw) * 1.1 * fl, 0.0, Color(1.0, 0.55, 0.2, 0.35))
 	for f in fx:
 		if f.kind == "flash":
@@ -1635,7 +1635,7 @@ func _draw_add(ci: CanvasItem) -> void:
 	if theme.glow > 0.0:
 		# crystal shimmer over the shaft
 		var sr = Rect2(wx(shaft.x0), wy(L.fill_top), (shaft.x1 - shaft.x0) * g, (BY - L.fill_top) * g)
-		var pulse := 0.10 + 0.05 * sin(time * 2.0)
+		var pulse = 0.10 + 0.05 * sin(time * 2.0)
 		var col: Color = theme.grains[0]
 		col.a = pulse * clampf(float(grains) / float(grains0) * 1.5, 0.0, 1.0)
 		_draw_tex_centered(ci, glow_tex, sr.get_center(), sr.size * 1.4, 0.0, col)
@@ -1649,7 +1649,7 @@ func _shot(name: String) -> void:
 	if shots_dir == "":
 		return
 	await RenderingServer.frame_post_draw
-	var img := get_viewport().get_texture().get_image()
+	var img = get_viewport().get_texture().get_image()
 	img.save_png(shots_dir.path_join(name + ".png"))
 	print("AUTOTEST shot ", name)
 
@@ -1662,11 +1662,11 @@ func _near_rub(c: int, r: int) -> float:
 	return n
 
 func _bot_move() -> void:
-	var sp := has_special()
+	var sp = has_special()
 	if sp.x >= 0 and randf() < 0.6:
 		await activate(sp.x, sp.y)
 		return
-	var ms := all_moves()
+	var ms = all_moves()
 	if ms.is_empty():
 		return
 	ms.sort_custom(func(a, b): return _near_rub(a[0].x, a[0].y) + _near_rub(a[1].x, a[1].y) > _near_rub(b[0].x, b[0].y) + _near_rub(b[1].x, b[1].y))
