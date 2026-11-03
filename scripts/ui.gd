@@ -123,6 +123,13 @@ func build() -> void:
 	root.theme = th
 	add_child(root)
 
+	# ----- board input catcher (behind HUD and cards) -----
+	var catcher := Control.new()
+	catcher.set_anchors_preset(Control.PRESET_FULL_RECT)
+	catcher.mouse_filter = Control.MOUSE_FILTER_STOP
+	catcher.gui_input.connect(func(ev): game.board_input(ev))
+	root.add_child(catcher)
+
 	# ----- HUD -----
 	hud = Control.new()
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE

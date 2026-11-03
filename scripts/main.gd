@@ -1155,50 +1155,57 @@ func _cell_at(p: Vector2) -> Vector2i:
 		return Vector2i(c, r)
 	return Vector2i(-1, -1)
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch:
-		if event.index != 0:
+## Board input arrives through a full-screen Control in the UI layer (ui.gd), as mouse events.
+## Touches become mouse events on every platform, so one path covers phones, web and desktop.
+func board_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_pointer(event.pressed, event.position)
+	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+		_drag(event.position)
+
+func _pointer(pressed: bool, pos: Vector2) -> void:
+	if pressed:
+		last_input = time
+		hint = []
+		if state != "idle":
 			return
-		if event.pressed:
-			last_input = time
-			hint = []
-			if state != "idle":
-				return
-			var cell = _cell_at(event.position)
-			if cell.x < 0:
-				selected = Vector2i(-1, -1)
-				return
-			down_cell = cell
-			down_pos = event.position
-			down_moved = false
-		else:
-			if down_cell.x < 0:
-				return
-			var d = down_cell
-			down_cell = Vector2i(-1, -1)
-			if down_moved or state != "idle":
-				return
-			var m = grid[d.y][d.x]
-			if selected.x >= 0 and absi(selected.x - d.x) + absi(selected.y - d.y) == 1:
-				try_swap(selected, d)
-				return
-			if m != null and m.kind != "gem":
-				activate(d.x, d.y)
-				return
-			selected = Vector2i(-1, -1) if selected == d else d
-			play("click", 1.0, -10.0)
-	elif event is InputEventScreenDrag:
-		if event.index != 0 or down_cell.x < 0 or down_moved or state != "idle":
+		var cell = _cell_at(pos)
+		if cell.x < 0:
+			selected = Vector2i(-1, -1)
 			return
-		var dv: Vector2 = event.position - down_pos
-		var th = CELL * g * 0.35
-		if absf(dv.x) < th and absf(dv.y) < th:
+		down_cell = cell
+		down_pos = pos
+		down_moved = false
+	else:
+		if down_cell.x < 0:
 			return
-		down_moved = true
-		var c = down_cell
-		var t = Vector2i(c.x + int(signf(dv.x)), c.y) if absf(dv.x) > absf(dv.y) else Vector2i(c.x, c.y + int(signf(dv.y)))
-		if in_b(t.x, t.y) and not is_rub(t.x, t.y) and grid[t.y][t.x] != null:
-			try_swap(c, t)
+		var d = down_cell
+		down_cell = Vector2i(-1, -1)
+		if down_moved or state != "idle":
+			return
+		var m = grid[d.y][d.x]
+		if selected.x >= 0 and absi(selected.x - d.x) + absi(selected.y - d.y) == 1:
+			try_swap(selected, d)
+			return
+		if m != null and m.kind != "gem":
+			activate(d.x, d.y)
+			return
+		selected = Vector2i(-1, -1) if selected == d else d
+		play("click", 1.0, -10.0)
+
+func _drag(pos: Vector2) -> void:
+	if down_cell.x < 0 or down_moved or state != "idle":
+		return
+	var dv: Vector2 = pos - down_pos
+	var th = CELL * g * 0.3
+	if absf(dv.x) < th and absf(dv.y) < th:
+		return
+	down_moved = true
+	var c = down_cell
+	var t = Vector2i(c.x + int(signf(dv.x)), c.y) if absf(dv.x) > absf(dv.y) else Vector2i(c.x, c.y + int(signf(dv.y)))
+	if in_b(t.x, t.y) and not is_rub(t.x, t.y) and grid[t.y][t.x] != null:
+		selected = Vector2i(-1, -1)
+		try_swap(c, t)
 
 # ---------- simulation ----------
 func _sand_step() -> int:
