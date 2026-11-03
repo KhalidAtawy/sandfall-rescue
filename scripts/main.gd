@@ -1513,7 +1513,14 @@ func _hazard_front() -> float:
 	# x (world cells) of the hazard's leading edge
 	var far = room.x0 if facing > 0 else room.x1
 	var back := hero_x - facing * 3.2
-	return far + facing * hz_p * absf(back - far)
+	var base := 0.0
+	match L.get("hazard", ""):
+		"spikes":
+			base = 5.6
+		"golem":
+			base = 9.5
+	var dist := absf(back - far)
+	return far + facing * (base + hz_p * maxf(0.0, dist - base))
 
 func _anim(dt: float) -> void:
 	if room.is_empty() or hero == null:
@@ -1547,7 +1554,7 @@ func _anim(dt: float) -> void:
 			bob = -absf(sin(hero_t * 13.0)) * 0.7
 		"scared":
 			bob = sin(hero_t * 40.0) * 0.15
-	hero.position = Vector2(wx(hero_x), wy(BY - hero_lift - bob + 0.35) - 181.0 * s)
+	hero.position = Vector2(wx(hero_x), wy(BY - 1.25 - hero_lift - bob) - 181.0 * s)
 	hero.modulate.a = hero_alpha
 	# golem
 	if L.get("hazard", "") == "golem":
@@ -1563,7 +1570,7 @@ func _anim(dt: float) -> void:
 		golem.pose(_golem_target(hero_t, clampf(hz_speed * 6.0, 0.0, 1.0)), gk)
 		golem.scale = Vector2(gs * facing, gs)
 		var gx := _hazard_front() - facing * 5.5
-		golem.position = Vector2(wx(gx), wy(BY + 0.3 - absf(sin(golem_phase)) * 0.4) - 213.0 * gs)
+		golem.position = Vector2(wx(gx), wy(BY - 1.2 - absf(sin(golem_phase)) * 0.4) - 213.0 * gs)
 	# lava embers
 	if L.get("hazard", "") == "lava" and dt > 0.0:
 		ember_t -= dt
