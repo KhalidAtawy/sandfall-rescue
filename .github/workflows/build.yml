@@ -74,6 +74,14 @@ jobs:
             autotest.log
             import.log
 
+      - name: Share play-test results
+        if: always()
+        run: |
+          mkdir -p /tmp/ci && cp -r shots /tmp/ci/ 2>/dev/null || true
+          cp *.log /tmp/ci/ 2>/dev/null || true
+          cd /tmp/ci && git init -q -b ci-results && git config user.name sandfall-bot && git config user.email actions@users.noreply.github.com
+          git add -A && git commit -q -m "CI results ${GITHUB_RUN_NUMBER}" && git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci-results
+
       - name: Export Android APK
         env:
           GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/android/sandfall-test.keystore
@@ -84,6 +92,12 @@ jobs:
           godot --headless --path . --export-release "Android" build/android/sandfall-rescue.apk 2>&1 | tee android.log
           test -f build/android/sandfall-rescue.apk
           ls -la build/android
+      - name: Share export logs
+        if: always()
+        run: |
+          cd /tmp/ci 2>/dev/null || exit 0
+          cp $GITHUB_WORKSPACE/android.log . 2>/dev/null || true
+          git add -A && git commit -q -m "export logs" && git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci-results || true
 
       - name: Export Web build
         run: |
