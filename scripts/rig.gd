@@ -20,7 +20,7 @@ func setup(d: Dictionary) -> void:
 		var bone := Bone2D.new()
 		bone.name = b.name
 		bone.set_autocalculate_length_and_angle(false)
-		bone.set_length(maxf(8.0, b.len))
+		bone.set_length(maxf(8.0, float(b.get("len", 0.0))))
 		bone.position = Vector2(b.pos[0], b.pos[1])
 		if b.parent == "":
 			skeleton.add_child(bone)
@@ -29,7 +29,7 @@ func setup(d: Dictionary) -> void:
 		bone.rest = bone.transform
 		bones[b.name] = bone
 		angles[b.name] = 0.0
-		lens[b.name] = b.len
+		lens[b.name] = float(b.get("len", 0.0))
 		var h := Node2D.new()
 		h.rotation = b.rot
 		bone.add_child(h)
