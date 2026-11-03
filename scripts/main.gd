@@ -235,9 +235,9 @@ func save_progress() -> void:
 func _layout() -> void:
 	var vs := get_viewport_rect().size
 	var safe := _safe_insets()
-	var top := safe.x + Ui.HUD_H
+	var top: float = safe.x + Ui.HUD_H
 	var bottom := safe.y + 12.0
-	var avail_h := vs.y - top - bottom
+	var avail_h: float = vs.y - top - bottom
 	var avail_w := vs.x - 20.0
 	g = maxf(2.0, minf(avail_w / SW, avail_h / SH))
 	ox = (vs.x - SW * g) / 2.0
@@ -445,13 +445,13 @@ func find_clusters() -> Array:
 	if runs.is_empty():
 		return []
 	# union runs sharing cells into clusters
-	var owner := {}
+	var owner_of := {}
 	var clusters := []
 	for run in runs:
 		var hit := -1
 		for id in run.cells:
-			if owner.has(id):
-				hit = owner[id]
+			if owner_of.has(id):
+				hit = owner_of[id]
 				break
 		if hit < 0:
 			hit = clusters.size()
@@ -459,32 +459,40 @@ func find_clusters() -> Array:
 		var cl: Dictionary = clusters[hit]
 		cl.runs.append(run)
 		for id in run.cells:
-			if owner.has(id) and owner[id] != hit:
+			if owner_of.has(id) and owner_of[id] != hit:
 				# merge the other cluster into this one
-				var other: Dictionary = clusters[owner[id]]
-				var oi: int = owner[id]
+				var other: Dictionary = clusters[owner_of[id]]
+				var oi: int = owner_of[id]
 				for oid in other.cells:
 					cl.cells[oid] = true
-					owner[oid] = hit
+					owner_of[oid] = hit
 				cl.runs.append_array(other.runs)
 				clusters[oi] = {"cells": {}, "runs": []}
 			cl.cells[id] = true
-			owner[id] = hit
+			owner_of[id] = hit
 	var out := []
 	for cl in clusters:
 		if not cl.cells.is_empty():
 			out.append(cl)
 	return out
 
-func _line_len(cf: Callable, c: int, r: int, dx: int, dy: int) -> int:
-	var k: int = cf.call(c, r)
+# colour at (x, y) as if the gems at sw[0..1] and sw[2..3] were swapped (sw[4], sw[5] = their colours)
+func _color_sw(x: int, y: int, sw: Array) -> int:
+	if x == sw[0] and y == sw[1]:
+		return sw[5]
+	if x == sw[2] and y == sw[3]:
+		return sw[4]
+	return color_at(x, y)
+
+func _line_len(sw: Array, c: int, r: int, dx: int, dy: int) -> int:
+	var k := _color_sw(c, r, sw)
 	var n := 1
 	var s := 1
-	while cf.call(c + dx * s, r + dy * s) == k:
+	while _color_sw(c + dx * s, r + dy * s, sw) == k:
 		n += 1
 		s += 1
 	s = 1
-	while cf.call(c - dx * s, r - dy * s) == k:
+	while _color_sw(c - dx * s, r - dy * s, sw) == k:
 		n += 1
 		s += 1
 	return n
@@ -502,13 +510,8 @@ func all_moves() -> Array:
 				var b := color_at(c2, r2)
 				if a < 0 or b < 0 or a == b:
 					continue
-				var cf := func(x: int, y: int) -> int:
-					if x == c and y == r:
-						return b
-					if x == c2 and y == r2:
-						return a
-					return color_at(x, y)
-				if _line_len(cf, c, r, 1, 0) >= 3 or _line_len(cf, c, r, 0, 1) >= 3 or _line_len(cf, c2, r2, 1, 0) >= 3 or _line_len(cf, c2, r2, 0, 1) >= 3:
+				var sw := [c, r, c2, r2, a, b]
+				if _line_len(sw, c, r, 1, 0) >= 3 or _line_len(sw, c, r, 0, 1) >= 3 or _line_len(sw, c2, r2, 1, 0) >= 3 or _line_len(sw, c2, r2, 0, 1) >= 3:
 					out.append([Vector2i(c, r), Vector2i(c2, r2)])
 	return out
 
@@ -534,11 +537,11 @@ func most_common_color() -> int:
 	return n.find(n.max())
 
 # ---------- tiny tween system ----------
-func tween(o: Object, props: Dictionary, dur: float, ease := "out", delay := 0.0) -> float:
+func tween(o: Object, props: Dictionary, dur: float, easing := "out", delay := 0.0) -> float:
 	var from := {}
 	for k in props:
 		from[k] = o.get(k)
-	tweens.append({"o": o, "from": from, "to": props, "t": -delay, "dur": maxf(0.001, dur), "ease": ease})
+	tweens.append({"o": o, "from": from, "to": props, "t": -delay, "dur": maxf(0.001, dur), "ease": easing})
 	return delay + dur
 
 func _ease(e: String, t: float) -> float:
@@ -598,7 +601,7 @@ func damage_rubble(id: int) -> void:
 	var hit := 0
 	for y in range(BY + r * CELL, BY + (r + 1) * CELL):
 		for x in range(BX + c * CELL, BX + (c + 1) * CELL):
-			var i := y * SW + x
+			var i: int = y * SW + x
 			var v := sand[i]
 			if v == 0:
 				continue
@@ -951,10 +954,10 @@ func try_swap(a: Vector2i, b: Vector2i) -> void:
 			var sp: Gem = A if sa else B
 			var pos: Vector2i = b if sa else a
 			var other: Gem = B if sa else A
-			var seed := {"c": pos.x, "r": pos.y, "kind": sp.kind, "dir": sp.dir, "delay": 0.0, "src": sp}
+			var sd0 := {"c": pos.x, "r": pos.y, "kind": sp.kind, "dir": sp.dir, "delay": 0.0, "src": sp}
 			if sp.kind == "light":
-				seed.color = other.color
-			seeds = [seed]
+				sd0.color = other.color
+			seeds = [sd0]
 		await detonate(seeds)
 		await collapse()
 		await cascade()
@@ -986,10 +989,10 @@ func activate(c: int, r: int) -> void:
 	selected = Vector2i(-1, -1)
 	moves -= 1
 	_update_hud()
-	var seed := {"c": c, "r": r, "kind": m.kind, "dir": m.dir, "delay": 0.0, "src": m}
+	var sd0 := {"c": c, "r": r, "kind": m.kind, "dir": m.dir, "delay": 0.0, "src": m}
 	if m.kind == "light":
-		seed.color = most_common_color()
-	await detonate([seed])
+		sd0.color = most_common_color()
+	await detonate([sd0])
 	await collapse()
 	await cascade()
 	await end_turn()
@@ -1109,7 +1112,7 @@ func plus_five() -> void:
 			var in_room := (x >= room.x0 and x < room.x1) or x == door_col
 			if not in_room:
 				continue
-			var i := y * SW + x
+			var i: int = y * SW + x
 			if sand[i] != 0:
 				var v := sand[i]
 				sand[i] = 0
@@ -1203,15 +1206,15 @@ func _sand_step() -> int:
 	flip ^= 1
 	var w := ax1 - ax0
 	for y in range(ay1 - 1, ay0 - 1, -1):
-		var base := y * SW
+		var base: int = y * SW
 		var ltr := ((y + flip) & 1) == 1
 		for k in w:
 			var x: int = (ax0 + k) if ltr else (ax1 - 1 - k)
-			var i := base + x
+			var i: int = base + x
 			var v := sand[i]
 			if v == 0:
 				continue
-			var b := i + SW
+			var b: int = i + SW
 			if mask[b] == 1 and sand[b] == 0:
 				sand[b] = v
 				sand[i] = 0
@@ -1221,7 +1224,7 @@ func _sand_step() -> int:
 			for _t in 2:
 				var nx := x + d
 				if nx >= ax0 and nx < ax1:
-					var j := b + d
+					var j: int = b + d
 					if mask[j] == 1 and sand[j] == 0 and mask[i + d] == 1 and sand[i + d] == 0:
 						sand[j] = v
 						sand[i] = 0
@@ -1439,8 +1442,8 @@ func _draw_back(ci: CanvasItem) -> void:
 		return
 	# torch on the far wall of the room
 	var rx := wx(room.x0)
-	var rw := (room.x1 - room.x0) * g
-	var tx := rx + rw * (0.22 if facing > 0 else 0.78)
+	var rw: float = (room.x1 - room.x0) * g
+	var tx: float = rx + rw * (0.22 if facing > 0 else 0.78)
 	var ty := wy(room.y0 + 6)
 	var tsz := Vector2(g * 3.0, g * 6.0)
 	ci.draw_texture_rect(tex.torch, Rect2(Vector2(tx, ty) - Vector2(tsz.x / 2, tsz.y * 0.35), tsz), false)
@@ -1587,7 +1590,7 @@ func _draw_fx(ci: CanvasItem) -> void:
 				var pts := PackedVector2Array()
 				pts.append(Vector2(f.x0, f.y0))
 				for k in range(1, 6):
-					var t := k / 6.0
+					var t: float = k / 6.0
 					pts.append(Vector2(lerpf(f.x0, f.x1, t) + (randf() - 0.5) * g * 2.5, lerpf(f.y0, f.y1, t) + (randf() - 0.5) * g * 2.5))
 				pts.append(Vector2(f.x1, f.y1))
 				ci.draw_polyline(pts, Color(0.9, 0.82, 1.0, 1.0 - p), maxf(1.5, g * 0.5), true)
@@ -1617,8 +1620,8 @@ func _draw_add(ci: CanvasItem) -> void:
 		return
 	# warm torch light in the room
 	var rx := wx(room.x0)
-	var rw := (room.x1 - room.x0) * g
-	var tx := rx + rw * (0.22 if facing > 0 else 0.78)
+	var rw: float = (room.x1 - room.x0) * g
+	var tx: float = rx + rw * (0.22 if facing > 0 else 0.78)
 	var ty := wy(room.y0 + 4.5)
 	var fl := 1.0 + sin(hero_t * 11.0) * 0.06
 	_draw_tex_centered(ci, glow_tex, Vector2(tx, ty), Vector2(rw, rw) * 1.1 * fl, 0.0, Color(1.0, 0.55, 0.2, 0.35))

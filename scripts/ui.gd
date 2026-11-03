@@ -57,11 +57,11 @@ class Stars extends Control:
 			pts.append(c + Vector2(cos(a), sin(a)) * rr)
 		return pts
 	func _draw() -> void:
-		var gap := star_size * 1.15
-		var x0 := size.x / 2.0 - gap
+		var gap: float = star_size * 1.15
+		var x0: float = size.x / 2.0 - gap
 		for i in 3:
 			var c := Vector2(x0 + i * gap, size.y / 2.0 - (star_size * 0.15 if i == 1 else 0.0))
-			var r := star_size / 2.0 * (1.15 if i == 1 else 1.0)
+			var r: float = star_size / 2.0 * (1.15 if i == 1 else 1.0)
 			if i < n:
 				draw_colored_polygon(_star(c + Vector2(0, 4), r), Color("9a6410"))
 				draw_colored_polygon(_star(c, r), Color("f5c542"))
@@ -289,7 +289,7 @@ func show_menu() -> void:
 		lt.f_body = font_body
 		lt.custom_minimum_size = Vector2(tile_w, 196)
 		_style_button(lt, Color("3a2d66"), Color("54438a"), 26)
-		var li := i
+		var li: int = i
 		lt.pressed.connect(func():
 			game.play("click")
 			game.start_level(li))

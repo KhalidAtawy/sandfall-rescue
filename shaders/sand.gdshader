@@ -2,7 +2,7 @@ shader_type canvas_item;
 // Each texel of TEXTURE is one cell of the debris grid (0 = empty, 1..3 = grain variant).
 // Every pixel looks at its 3x3 neighbourhood and composites the grain sprites that overlap it,
 // so grains are drawn slightly larger than their cell and pile up like real balls or shards.
-uniform sampler2D grain_tex : filter_linear_mipmap;
+uniform sampler2D grain_tex : filter_linear;
 uniform vec2 grid = vec2(60.0, 110.0);
 uniform vec4 col1 : source_color = vec4(0.94, 0.77, 0.42, 1.0);
 uniform vec4 col2 : source_color = vec4(0.85, 0.6, 0.24, 1.0);
