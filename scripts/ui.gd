@@ -82,10 +82,10 @@ class LevelTile extends Button:
 		var a := 0.45 if locked else 1.0
 		var num := str(idx + 1)
 		var ns := 64
-		var tw := f_display.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, ns).x
+		var tw = f_display.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, ns).x
 		draw_string(f_display, Vector2((w - tw) / 2.0, 72), num, HORIZONTAL_ALIGNMENT_LEFT, -1, ns, Color(1, 0.95, 0.86, a))
 		var ts := 26
-		var tt := f_body.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, ts).x
+		var tt = f_body.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, ts).x
 		draw_string(f_body, Vector2((w - tt) / 2.0, 112), title, HORIZONTAL_ALIGNMENT_LEFT, -1, ts, Color(0.79, 0.73, 0.64, a))
 		var sw := Color(swatch.r, swatch.g, swatch.b, a)
 		draw_rect(Rect2(w / 2.0 - 30, 126, 60, 12), sw)
@@ -318,7 +318,7 @@ func show_win(stars: int, moves: int, title: String, has_next: bool) -> void:
 			st.n = k + 1
 			st.queue_redraw()
 			game.play("shine", 1.0 + k * 0.15, -4.0))
-	var d := _label("%d move%s to spare in %s." % [moves, "" if moves == 1 else "s", title], font_body, 30, INK_SOFT)
+	var d = _label("%d move%s to spare in %s." % [moves, "" if moves == 1 else "s", title], font_body, 30, INK_SOFT)
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card_box.add_child(d)
 	if has_next:

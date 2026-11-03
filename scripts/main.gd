@@ -103,7 +103,7 @@ var tweens: Array = []
 var parts: Array = []
 var fx: Array = []
 
-var progress := {"best": [0, 0, 0, 0]}
+var progress = {"best": [0, 0, 0, 0]}
 const SAVE_PATH := "user://progress.cfg"
 
 # ---------- nodes ----------
@@ -176,7 +176,7 @@ func _layer(fn: Callable) -> Node2D:
 	return n
 
 func _load_textures() -> void:
-	var names := ["red", "blue", "yellow", "green", "rocket", "bomb", "light", "tile",
+	var names = ["red", "blue", "yellow", "green", "rocket", "bomb", "light", "tile",
 		"hero_push", "hero_cheer", "hero_scared", "door", "torch", "spike", "grain_ball",
 		"grain_shard", "goldbar", "wall_sand", "wall_iron", "wall_crystal", "wall_emerald"]
 	for n in names:
@@ -369,7 +369,7 @@ func _fill_board() -> void:
 	for _tries in 200:
 		grid = []
 		for r in ROWS:
-			var row := []
+			var row = []
 			row.resize(COLS)
 			grid.append(row)
 		for r in ROWS:
@@ -409,7 +409,7 @@ func color_at(c: int, r: int) -> int:
 	return -1
 
 func find_clusters() -> Array:
-	var runs := []
+	var runs = []
 	for r in ROWS:
 		var c := 0
 		while c < COLS:
@@ -421,7 +421,7 @@ func find_clusters() -> Array:
 			while color_at(e + 1, r) == k:
 				e += 1
 			if e - c >= 2:
-				var cells := []
+				var cells = []
 				for x in range(c, e + 1):
 					cells.append(r * COLS + x)
 				runs.append({"h": true, "cells": cells})
@@ -437,7 +437,7 @@ func find_clusters() -> Array:
 			while color_at(c, e + 1) == k:
 				e += 1
 			if e - r >= 2:
-				var cells := []
+				var cells = []
 				for y in range(r, e + 1):
 					cells.append(y * COLS + c)
 				runs.append({"h": false, "cells": cells})
@@ -446,7 +446,7 @@ func find_clusters() -> Array:
 		return []
 	# union runs sharing cells into clusters
 	var owner_of := {}
-	var clusters := []
+	var clusters = []
 	for run in runs:
 		var hit := -1
 		for id in run.cells:
@@ -470,7 +470,7 @@ func find_clusters() -> Array:
 				clusters[oi] = {"cells": {}, "runs": []}
 			cl.cells[id] = true
 			owner_of[id] = hit
-	var out := []
+	var out = []
 	for cl in clusters:
 		if not cl.cells.is_empty():
 			out.append(cl)
@@ -498,7 +498,7 @@ func _line_len(sw: Array, c: int, r: int, dx: int, dy: int) -> int:
 	return n
 
 func all_moves() -> Array:
-	var out := []
+	var out = []
 	for r in ROWS:
 		for c in COLS:
 			for d in [Vector2i(1, 0), Vector2i(0, 1)]:
@@ -510,7 +510,7 @@ func all_moves() -> Array:
 				var b := color_at(c2, r2)
 				if a < 0 or b < 0 or a == b:
 					continue
-				var sw := [c, r, c2, r2, a, b]
+				var sw = [c, r, c2, r2, a, b]
 				if _line_len(sw, c, r, 1, 0) >= 3 or _line_len(sw, c, r, 0, 1) >= 3 or _line_len(sw, c2, r2, 1, 0) >= 3 or _line_len(sw, c2, r2, 0, 1) >= 3:
 					out.append([Vector2i(c, r), Vector2i(c2, r2)])
 	return out
@@ -528,7 +528,7 @@ func has_special() -> Vector2i:
 	return Vector2i(-1, -1)
 
 func most_common_color() -> int:
-	var n := [0, 0, 0, 0]
+	var n = [0, 0, 0, 0]
 	for r in ROWS:
 		for c in COLS:
 			var k := color_at(c, r)
@@ -588,8 +588,8 @@ func _pop_gem(m: Gem, delay := 0.0) -> float:
 		tween(m, {"scale": 0.0}, 0.11)
 	)
 	later(delay + 0.19, func():
-		var r := int(round(m.y))
-		var c := int(round(m.x))
+		var r = int(round(m.y))
+		var c = int(round(m.x))
 		if in_b(c, r) and grid[r][c] == m:
 			grid[r][c] = null
 	)
@@ -602,7 +602,7 @@ func damage_rubble(id: int) -> void:
 	for y in range(BY + r * CELL, BY + (r + 1) * CELL):
 		for x in range(BX + c * CELL, BX + (c + 1) * CELL):
 			var i: int = y * SW + x
-			var v := sand[i]
+			var v = sand[i]
 			if v == 0:
 				continue
 			sand[i] = 0
@@ -768,7 +768,7 @@ func cascade() -> void:
 		await collapse()
 
 func _area_for(s: Dictionary) -> Array:
-	var out := []
+	var out = []
 	var c: int = s.c
 	var r: int = s.r
 	var row := func(y: int, from: int) -> void:
@@ -812,12 +812,12 @@ func _area_for(s: Dictionary) -> Array:
 	return out
 
 func _spawn_fx(s: Dictionary) -> void:
-	var x := cell_cx(s.c)
-	var y := cell_cy(s.r)
+	var x = cell_cx(s.c)
+	var y = cell_cy(s.r)
 	var s2 := CELL * g
 	var k: String = s.kind
 	if k == "rocket" or k == "cross" or k == "big":
-		var dirs := []
+		var dirs = []
 		if k != "rocket" or s.dir == "h":
 			dirs.append_array([Vector2(1, 0), Vector2(-1, 0)])
 		if k != "rocket" or s.dir == "v":
@@ -870,8 +870,8 @@ func detonate(seeds: Array) -> void:
 			if m == null:
 				continue
 			if s.kind == "light":
-				var x0 := cell_cx(s.c)
-				var y0 := cell_cy(s.r)
+				var x0 = cell_cx(s.c)
+				var y0 = cell_cy(s.r)
 				var x1 := cell_cx(c)
 				var y1 := cell_cy(r)
 				later(delay - 0.06, func(): fx.append({"kind": "bolt", "x0": x0, "y0": y0, "x1": x1, "y1": y1, "life": 0.0, "max": 0.3}))
@@ -879,7 +879,7 @@ func detonate(seeds: Array) -> void:
 				hit[id] = delay
 			if m.kind != "gem" and not triggered.has(m):
 				triggered[m] = true
-				var ns := {"c": c, "r": r, "kind": m.kind, "dir": m.dir, "delay": delay + 0.04, "src": m}
+				var ns = {"c": c, "r": r, "kind": m.kind, "dir": m.dir, "delay": delay + 0.04, "src": m}
 				if m.kind == "light":
 					ns.color = most_common_color()
 				q.append(ns)
@@ -915,9 +915,9 @@ func try_swap(a: Vector2i, b: Vector2i) -> void:
 	if sa or sb:
 		moves -= 1
 		_update_hud()
-		var seeds := []
+		var seeds = []
 		if sa and sb:
-			var kinds := [A.kind, B.kind]
+			var kinds = [A.kind, B.kind]
 			kinds.sort()
 			var key := "%s+%s" % kinds
 			if key == "light+light":
@@ -926,7 +926,7 @@ func try_swap(a: Vector2i, b: Vector2i) -> void:
 				var other: Gem = B if A.kind == "light" else A
 				var lt: Gem = A if A.kind == "light" else B
 				var k := most_common_color()
-				var conv := []
+				var conv = []
 				for y in ROWS:
 					for x in COLS:
 						if color_at(x, y) == k:
@@ -954,7 +954,7 @@ func try_swap(a: Vector2i, b: Vector2i) -> void:
 			var sp: Gem = A if sa else B
 			var pos: Vector2i = b if sa else a
 			var other: Gem = B if sa else A
-			var sd0 := {"c": pos.x, "r": pos.y, "kind": sp.kind, "dir": sp.dir, "delay": 0.0, "src": sp}
+			var sd0 = {"c": pos.x, "r": pos.y, "kind": sp.kind, "dir": sp.dir, "delay": 0.0, "src": sp}
 			if sp.kind == "light":
 				sd0.color = other.color
 			seeds = [sd0]
@@ -989,7 +989,7 @@ func activate(c: int, r: int) -> void:
 	selected = Vector2i(-1, -1)
 	moves -= 1
 	_update_hud()
-	var sd0 := {"c": c, "r": r, "kind": m.kind, "dir": m.dir, "delay": 0.0, "src": m}
+	var sd0 = {"c": c, "r": r, "kind": m.kind, "dir": m.dir, "delay": 0.0, "src": m}
 	if m.kind == "light":
 		sd0.color = most_common_color()
 	await detonate([sd0])
@@ -1021,7 +1021,7 @@ func end_turn() -> void:
 
 func _shuffle() -> void:
 	ui.toast("No moves left. Shuffling!")
-	var gems := []
+	var gems = []
 	for r in ROWS:
 		for c in COLS:
 			var m = grid[r][c]
@@ -1042,7 +1042,7 @@ func _shuffle() -> void:
 func _win() -> void:
 	state = "won"
 	hero_pose = "cheer"
-	var rest := []
+	var rest = []
 	for i in sand.size():
 		if sand[i] != 0:
 			rest.append(i)
@@ -1051,7 +1051,7 @@ func _win() -> void:
 		later(k * 0.008, func():
 			if sand[i] == 0:
 				return
-			var v := sand[i]
+			var v = sand[i]
 			sand[i] = 0
 			grains -= 1
 			sand_dirty = true
@@ -1068,7 +1068,7 @@ func _win() -> void:
 	play("win")
 	buzz(60)
 	await collapse()
-	var ratio := float(moves) / float(L.moves)
+	var ratio = float(moves) / float(L.moves)
 	var stars := 3 if ratio >= 0.3 else (2 if ratio >= 0.12 else 1)
 	if stars > int(progress.best[level_idx]):
 		progress.best[level_idx] = stars
@@ -1109,12 +1109,12 @@ func plus_five() -> void:
 		for x in range(room.x0 - 1, room.x1 + 1):
 			if x < 0 or x >= SW:
 				continue
-			var in_room := (x >= room.x0 and x < room.x1) or x == door_col
+			var in_room = (x >= room.x0 and x < room.x1) or x == door_col
 			if not in_room:
 				continue
 			var i: int = y * SW + x
 			if sand[i] != 0:
-				var v := sand[i]
+				var v = sand[i]
 				sand[i] = 0
 				grains -= 1
 				if randf() < 0.3:
@@ -1149,8 +1149,8 @@ var down_pos := Vector2.ZERO
 var down_moved := false
 
 func _cell_at(p: Vector2) -> Vector2i:
-	var c := int(floor((p.x - ox - BX * g) / (CELL * g)))
-	var r := int(floor((p.y - oy - BY * g) / (CELL * g)))
+	var c = int(floor((p.x - ox - BX * g) / (CELL * g)))
+	var r = int(floor((p.y - oy - BY * g) / (CELL * g)))
 	if in_b(c, r) and not is_rub(c, r) and grid[r][c] != null:
 		return Vector2i(c, r)
 	return Vector2i(-1, -1)
@@ -1164,7 +1164,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			hint = []
 			if state != "idle":
 				return
-			var cell := _cell_at(event.position)
+			var cell = _cell_at(event.position)
 			if cell.x < 0:
 				selected = Vector2i(-1, -1)
 				return
@@ -1211,7 +1211,7 @@ func _sand_step() -> int:
 		for k in w:
 			var x: int = (ax0 + k) if ltr else (ax1 - 1 - k)
 			var i: int = base + x
-			var v := sand[i]
+			var v = sand[i]
 			if v == 0:
 				continue
 			var b: int = i + SW
@@ -1251,8 +1251,8 @@ func _process(dt: float) -> void:
 		var tw: Dictionary = tweens[i]
 		tw.t += dt
 		if tw.t >= 0.0:
-			var p := minf(1.0, tw.t / tw.dur)
-			var e := _ease(tw.ease, p)
+			var p = minf(1.0, tw.t / tw.dur)
+			var e = _ease(tw.ease, p)
 			var o: Object = tw.o
 			for k in tw.to:
 				o.set(k, lerpf(tw.from[k], tw.to[k], e))
@@ -1339,7 +1339,7 @@ func _process(dt: float) -> void:
 				n += 1
 			if sand[y * SW + xs2] != 0:
 				n += 1
-		var target := float(n) / float((room.y1 - room.y0) * 2)
+		var target = float(n) / float((room.y1 - room.y0) * 2)
 		hero_strain += (target - hero_strain) * minf(1.0, dt * 4.0)
 	if state == "idle" and time - last_input > 5.5 and hint.is_empty():
 		var mv := find_move()
@@ -1397,7 +1397,7 @@ func _draw_tex_centered(ci: CanvasItem, t: Texture2D, center: Vector2, size: Vec
 		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _vgrad(ci: CanvasItem, r: Rect2, top: Color, bottom: Color) -> void:
-	var pts := PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+	var pts = PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
 	ci.draw_polygon(pts, PackedColorArray([top, top, bottom, bottom]))
 
 func _draw_bg(ci: CanvasItem) -> void:
@@ -1412,11 +1412,11 @@ func _draw_bg(ci: CanvasItem) -> void:
 	_vgrad(ci, Rect2(ox, oy, W, BY * g * 0.6), Color(0, 0, 0, 0.45), Color(0, 0, 0, 0))
 	_vgrad(ci, Rect2(ox, oy + H * 0.85, W, H * 0.15), Color(0, 0, 0, 0), Color(0, 0, 0, 0.35))
 	# room
-	var rr := Rect2(wx(room.x0), wy(room.y0), (room.x1 - room.x0) * g, (room.y1 - room.y0) * g)
+	var rr = Rect2(wx(room.x0), wy(room.y0), (room.x1 - room.x0) * g, (room.y1 - room.y0) * g)
 	_vgrad(ci, rr, theme.room.darkened(0.35), theme.room)
 	ci.draw_rect(Rect2(rr.position, Vector2(rr.size.x, g * 1.2)), Color(0, 0, 0, 0.35))
 	# shaft recess
-	var sr := Rect2(wx(shaft.x0), wy(shaft.y0), (shaft.x1 - shaft.x0) * g, (BY - shaft.y0) * g)
+	var sr = Rect2(wx(shaft.x0), wy(shaft.y0), (shaft.x1 - shaft.x0) * g, (BY - shaft.y0) * g)
 	_vgrad(ci, sr, theme.recess[1], theme.recess[0])
 	# board backing
 	var sb := StyleBoxFlat.new()
@@ -1441,10 +1441,10 @@ func _draw_back(ci: CanvasItem) -> void:
 	if L.is_empty():
 		return
 	# torch on the far wall of the room
-	var rx := wx(room.x0)
+	var rx = wx(room.x0)
 	var rw: float = (room.x1 - room.x0) * g
 	var tx: float = rx + rw * (0.22 if facing > 0 else 0.78)
-	var ty := wy(room.y0 + 6)
+	var ty = wy(room.y0 + 6)
 	var tsz := Vector2(g * 3.0, g * 6.0)
 	ci.draw_texture_rect(tex.torch, Rect2(Vector2(tx, ty) - Vector2(tsz.x / 2, tsz.y * 0.35), tsz), false)
 	var fl := 1.0 + sin(hero_t * 17.0) * 0.12 + sin(hero_t * 7.0) * 0.08
@@ -1462,9 +1462,9 @@ func _draw_frame(ci: CanvasItem) -> void:
 		return
 	var gb: Texture2D = tex.goldbar
 	var t := g * 1.4
-	var sx0 := wx(shaft.x0)
-	var sx1 := wx(shaft.x1)
-	var sy := wy(shaft.y0)
+	var sx0 = wx(shaft.x0)
+	var sx1 = wx(shaft.x1)
+	var sy = wy(shaft.y0)
 	var by := wy(BY)
 	# shaft sides (vertical bars drawn rotated)
 	for x in [sx0 - t * 0.5, sx1 + t * 0.5]:
@@ -1473,9 +1473,9 @@ func _draw_frame(ci: CanvasItem) -> void:
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	ci.draw_texture_rect(gb, Rect2(Vector2(sx0 - t, sy - t * 0.9), Vector2(sx1 - sx0 + t * 2, t)), false)
 	# room: top bar and far wall
-	var rx0 := wx(room.x0)
-	var rx1 := wx(room.x1)
-	var ry := wy(room.y0)
+	var rx0 = wx(room.x0)
+	var rx1 = wx(room.x1)
+	var ry = wy(room.y0)
 	ci.draw_texture_rect(gb, Rect2(Vector2(rx0 - t * 0.3, ry - t * 0.5), Vector2(rx1 - rx0 + t * 0.6, t * 0.8)), false)
 	var far := rx0 if facing > 0 else rx1
 	ci.draw_set_transform(Vector2(far, (ry + by) / 2.0), PI / 2.0, Vector2.ONE)
@@ -1498,7 +1498,7 @@ func _draw_frame(ci: CanvasItem) -> void:
 
 func _draw_door(ci: CanvasItem) -> void:
 	var x := wx(door_col + 0.5)
-	var top := wy(room.y0) + g * 0.8
+	var top = wy(room.y0) + g * 0.8
 	var bot := wy(BY) - g * 0.2
 	var h := bot - top
 	if door_open:
@@ -1541,8 +1541,8 @@ func _draw_gems(ci: CanvasItem) -> void:
 			var m = grid[r][c]
 			if m == null or m.scale <= 0.0:
 				continue
-			var x := cell_cx(m.x)
-			var y := cell_cy(m.y)
+			var x = cell_cx(m.x)
+			var y = cell_cy(m.y)
 			if not hint.is_empty():
 				for k in hint.size():
 					var hc: Vector2i = hint[k]
@@ -1584,7 +1584,7 @@ func _draw_fx(ci: CanvasItem) -> void:
 				col.a = 1.0 - p
 				ci.draw_arc(Vector2(f.x, f.y), lerpf(f.r0, f.r1, 1.0 - (1.0 - p) * (1.0 - p)), 0, TAU, 40, col, maxf(1.0, g * (1.2 - p)), true)
 			"rkt":
-				var ang := atan2(f.vy, f.vx)
+				var ang = atan2(f.vy, f.vx)
 				_draw_tex_centered(ci, tex.rocket, Vector2(f.x, f.y), Vector2(S, S), ang + 0.35)
 			"bolt":
 				var pts := PackedVector2Array()
@@ -1619,10 +1619,10 @@ func _draw_add(ci: CanvasItem) -> void:
 	if L.is_empty():
 		return
 	# warm torch light in the room
-	var rx := wx(room.x0)
+	var rx = wx(room.x0)
 	var rw: float = (room.x1 - room.x0) * g
 	var tx: float = rx + rw * (0.22 if facing > 0 else 0.78)
-	var ty := wy(room.y0 + 4.5)
+	var ty = wy(room.y0 + 4.5)
 	var fl := 1.0 + sin(hero_t * 11.0) * 0.06
 	_draw_tex_centered(ci, glow_tex, Vector2(tx, ty), Vector2(rw, rw) * 1.1 * fl, 0.0, Color(1.0, 0.55, 0.2, 0.35))
 	for f in fx:
@@ -1634,7 +1634,7 @@ func _draw_add(ci: CanvasItem) -> void:
 			_draw_tex_centered(ci, glow_tex, Vector2(f.x, f.y), Vector2(g, g) * 8.0, 0.0, Color(1.0, 0.6, 0.2, 0.6))
 	if theme.glow > 0.0:
 		# crystal shimmer over the shaft
-		var sr := Rect2(wx(shaft.x0), wy(L.fill_top), (shaft.x1 - shaft.x0) * g, (BY - L.fill_top) * g)
+		var sr = Rect2(wx(shaft.x0), wy(L.fill_top), (shaft.x1 - shaft.x0) * g, (BY - L.fill_top) * g)
 		var pulse := 0.10 + 0.05 * sin(time * 2.0)
 		var col: Color = theme.grains[0]
 		col.a = pulse * clampf(float(grains) / float(grains0) * 1.5, 0.0, 1.0)
