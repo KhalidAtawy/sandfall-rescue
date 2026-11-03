@@ -1,0 +1,125 @@
+name: Build game
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.4.1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Godot and export templates
+        run: |
+          set -e
+          base=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+          wget -q $base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          wget -q $base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          sudo mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 /usr/local/bin/godot
+          tdir=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p $tdir
+          unzip -q Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          mv templates/* $tdir/
+          rm -rf templates *.zip *.tpz
+          mkdir -p ~/.config/godot
+          sdk="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$sdk" "$JAVA_HOME" > ~/.config/godot/editor_settings-4.4.tres
+          cat ~/.config/godot/editor_settings-4.4.tres
+          godot --version
+
+      - name: Import assets
+        run: |
+          timeout 600 godot --headless --import --path . 2>&1 | tee import.log || true
+          ls .godot/imported | head
+
+      - name: Play-test and take screenshots
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri libglx-mesa0 > /dev/null
+          mkdir -p shots
+          SHOTS_DIR=$PWD/shots xvfb-run -a -s "-screen 0 1080x1920x24" timeout 420 \
+            godot --path . --rendering-driver opengl3 --resolution 720x1280 --audio-driver Dummy -- --autotest 2>&1 | tee autotest.log || true
+          ls -la shots
+          if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid access" autotest.log; then echo "::error::Script errors during play-test"; exit 1; fi
+          grep "AUTOTEST RESULT" autotest.log || (echo "::error::Play-test did not finish"; exit 1)
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: |
+            shots/
+            autotest.log
+            import.log
+
+      - name: Export Android APK
+        env:
+          GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/android/sandfall-test.keystore
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: sandfall
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: sandfall-test
+        run: |
+          mkdir -p build/android
+          godot --headless --path . --export-release "Android" build/android/sandfall-rescue.apk 2>&1 | tee android.log
+          test -f build/android/sandfall-rescue.apk
+          ls -la build/android
+
+      - name: Export Web build
+        run: |
+          mkdir -p build/web
+          godot --headless --path . --export-release "Web" build/web/index.html 2>&1 | tee web.log
+          test -f build/web/index.html
+          cp shots/*.png build/web/ 2>/dev/null || true
+          ls -la build/web
+
+      - name: Upload builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: builds
+          path: |
+            build/android/sandfall-rescue.apk
+            build/web/
+
+      - name: Publish APK to the "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Build ${GITHUB_RUN_NUMBER} from commit ${GITHUB_SHA::7}. On Android, download sandfall-rescue.apk and open it to install."
+          if gh release view latest > /dev/null 2>&1; then
+            gh release edit latest --notes "$notes" --title "Sandfall Rescue (latest build)"
+            gh release upload latest build/android/sandfall-rescue.apk --clobber
+          else
+            gh release create latest build/android/sandfall-rescue.apk --title "Sandfall Rescue (latest build)" --notes "$notes" --prerelease
+          fi
+
+      - name: Publish web build to gh-pages
+        run: |
+          cd build/web
+          touch .nojekyll
+          git init -q -b gh-pages
+          git config user.name "sandfall-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Web build ${GITHUB_RUN_NUMBER}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
