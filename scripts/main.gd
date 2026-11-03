@@ -1366,7 +1366,7 @@ func _place_hero() -> void:
 	var tname = "hero_" + hero_pose
 	if hero.texture != tex[tname]:
 		hero.texture = tex[tname]
-	var h = 15.5 * g
+	var h = 20.5 * g
 	var s = h / 512.0
 	var door_x = wx(door_col) if facing > 0 else wx(door_col + 1)
 	var bob := 0.0
@@ -1382,9 +1382,9 @@ func _place_hero() -> void:
 	hero.scale = Vector2(s, s)
 	hero.flip_h = facing < 0
 	hero.rotation = lean
-	var cx = door_x - facing * 5.6 * g
+	var cx = door_x - facing * 7.2 * g
 	if hero_pose != "push":
-		cx = door_x - facing * 8.0 * g
+		cx = door_x - facing * 9.5 * g
 	hero.position = Vector2(cx, wy(BY) - h / 2.0 + bob + g * 0.3)
 
 # ---------- drawing ----------
