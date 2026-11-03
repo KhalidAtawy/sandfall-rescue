@@ -1,62 +1,55 @@
 extends Node2D
-## A cut-out character built from rendered body parts and rigged on Skeleton2D bones.
-## Each part hangs off a Bone2D placed at its joint; poses are set as joint angles
-## and blended smoothly, so the game can drive animations from code.
+## Zaki: a cut-out character built from the AI body-part art, rigged on Skeleton2D bones.
+## Rest pose = every limb hanging straight down; poses are joint angles blended smoothly.
 
 var skeleton: Skeleton2D
-var bones := {}        # part name -> Bone2D
-var sprites := {}      # part name -> Sprite2D
+var bones := {}        # name -> Bone2D
+var holders := {}      # name -> Node2D (carries the part's base rotation)
+var sprites := {}      # name -> Sprite2D
 var data: Dictionary
-var prefix := ""
-var faces := {}        # face name -> {"tex": Texture2D, "crop": Vector2}
+var faces := {}        # face name -> {"tex", "pivot"}
 var face := ""
-var angles := {}       # current blended angle per bone
-var root_offset := Vector2.ZERO
+var angles := {}
+var lens := {}
 
-func setup(d: Dictionary, pfx: String, tint := Color.WHITE) -> void:
+func setup(d: Dictionary) -> void:
 	data = d
-	prefix = pfx
 	skeleton = Skeleton2D.new()
 	add_child(skeleton)
-	var joints: Dictionary = d.joints
-	for part in d.order:
-		var jn: String = d.joint_of[part]
-		var jp := Vector2(joints[jn][0], joints[jn][1])
-		var b := Bone2D.new()
-		b.name = part
-		b.set_autocalculate_length_and_angle(false)
-		b.set_length(24.0)
-		var parent = d.parents[part]
-		if parent == null:
-			skeleton.add_child(b)
+	for b in d.bones:
+		var bone := Bone2D.new()
+		bone.name = b.name
+		bone.set_autocalculate_length_and_angle(false)
+		bone.set_length(maxf(8.0, b.len))
+		bone.position = Vector2(b.pos[0], b.pos[1])
+		if b.parent == "":
+			skeleton.add_child(bone)
 		else:
-			var pj: Array = joints[d.joint_of[parent]]
-			b.position = jp - Vector2(pj[0], pj[1])
-			bones[parent].add_child(b)
-		b.rest = b.transform
-		bones[part] = b
-		angles[part] = 0.0
+			bones[b.parent].add_child(bone)
+		bone.rest = bone.transform
+		bones[b.name] = bone
+		angles[b.name] = 0.0
+		lens[b.name] = b.len
+		var h := Node2D.new()
+		h.rotation = b.rot
+		bone.add_child(h)
+		holders[b.name] = h
 		var sp := Sprite2D.new()
 		sp.centered = false
-		sp.z_index = d.z[part]
-		sp.modulate = tint
-		var key: String = part
-		if part == "head" and d.has("faces"):
-			for f in d.faces:
-				var k: String = "head_" + f
-				faces[f] = {"tex": load("res://assets/gfx/rig/%s%s.png" % [pfx, k]),
-					"crop": Vector2(d.parts[k].crop[0], d.parts[k].crop[1]) - jp}
-			key = "head_" + d.faces[0]
-		sp.texture = load("res://assets/gfx/rig/%s%s.png" % [pfx, key])
-		sp.position = Vector2(d.parts[key].crop[0], d.parts[key].crop[1]) - jp
-		b.add_child(sp)
-		sprites[part] = sp
-	# far-side limbs a touch darker for depth
-	for part in sprites:
-		if part.ends_with("_b"):
-			sprites[part].modulate = tint * Color(0.82, 0.82, 0.86)
-	if d.has("faces"):
-		set_face(d.faces[0])
+		sp.z_index = b.z
+		sp.z_as_relative = true
+		if b.tex != "":
+			sp.texture = load(b.tex)
+			sp.position = -Vector2(b.pivot[0], b.pivot[1])
+		h.add_child(sp)
+		sprites[b.name] = sp
+	for f in d.faces:
+		faces[f] = {"tex": load(d.faces[f].tex), "pivot": Vector2(d.faces[f].pivot[0], d.faces[f].pivot[1])}
+	# far-side limbs slightly darker for depth
+	for n in sprites:
+		if n.ends_with("_b"):
+			sprites[n].modulate = Color(0.8, 0.8, 0.85)
+	set_face("neutral")
 
 func set_face(f: String) -> void:
 	if f == face or not faces.has(f):
@@ -64,22 +57,29 @@ func set_face(f: String) -> void:
 	face = f
 	var sp: Sprite2D = sprites["head"]
 	sp.texture = faces[f].tex
-	sp.position = faces[f].crop
+	sp.position = -faces[f].pivot
 
-## Blend every bone toward the target angles (radians). Bones not listed return to rest.
 func pose(target: Dictionary, k: float) -> void:
-	for part in bones:
-		var t: float = target.get(part, 0.0)
-		angles[part] = lerp_angle(angles[part], t, k)
-		bones[part].rotation = angles[part]
+	for n in bones:
+		var t: float = target.get(n, 0.0)
+		angles[n] = lerp_angle(angles[n], t, k)
+		bones[n].rotation = angles[n]
 
-## Snap straight to a pose (used when a level starts).
-func snap(target: Dictionary) -> void:
-	for part in bones:
-		angles[part] = target.get(part, 0.0)
-		bones[part].rotation = angles[part]
+## Lowest point of the feet below the hip, in rig pixels (so the rig can stand on a floor).
+func foot_drop() -> float:
+	var best := 0.0
+	for side in ["f", "b"]:
+		var t := Transform2D(angles["torso"], Vector2.ZERO)
+		var up: Dictionary = _bone("leg_up_" + side)
+		t = t * Transform2D(angles["leg_up_" + side], Vector2(up.pos[0], up.pos[1]))
+		var lo: Dictionary = _bone("leg_lo_" + side)
+		t = t * Transform2D(angles["leg_lo_" + side], Vector2(lo.pos[0], lo.pos[1]))
+		var tip: Vector2 = t * Vector2(0, lens["leg_lo_" + side] - 10.0)
+		best = maxf(best, tip.y)
+	return best
 
-## Height of the joint above the soles, in render pixels (used to stand the rig on a floor).
-func hip_height(sole_y: float) -> float:
-	var hp: Array = data.joints[data.joint_of[data.order[0]]]
-	return sole_y - hp[1]
+func _bone(n: String) -> Dictionary:
+	for b in data.bones:
+		if b.name == n:
+			return b
+	return {}

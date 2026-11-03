@@ -271,9 +271,13 @@ func hide_overlay() -> void:
 
 func show_menu() -> void:
 	_clear_card()
-	var t = _label("Sandfall Rescue", font_display, 76, GOLD)
-	_heading(t)
-	card_box.add_child(t)
+	var logo := TextureRect.new()
+	logo.texture = load("res://assets/gfx/ui/logo.png")
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo.custom_minimum_size = Vector2(card.custom_minimum_size.x - 120, (card.custom_minimum_size.x - 120) * 0.56)
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card_box.add_child(logo)
 	var d = _label("Zaki is holding the door shut. Match gems beside the debris to drain it before your moves run out.", font_body, 28, INK_SOFT)
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -294,7 +298,7 @@ func show_menu() -> void:
 		lt.disabled = lt.locked
 		lt.f_display = font_display
 		lt.f_body = font_body
-		lt.custom_minimum_size = Vector2(tile_w, 196)
+		lt.custom_minimum_size = Vector2(tile_w, 184)
 		_style_button(lt, Color("3a2d66"), Color("54438a"), 26)
 		var li: int = i
 		lt.pressed.connect(func():

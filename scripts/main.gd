@@ -7,9 +7,12 @@ const DrawLayer := preload("res://scripts/draw_layer.gd")
 const Ui := preload("res://scripts/ui.gd")
 const Rig := preload("res://scripts/rig.gd")
 const RigData := preload("res://scripts/rig_data.gd")
-const HERO_H := 14.5      # hero height in world cells
-const GOLEM_H := 21.0
+const Puppet := preload("res://scripts/puppet.gd")
+const HERO_H := 15.0      # hero height in world cells
+const HERO_PX := 1126.0   # hero height in rig pixels
 const ROOM_H := 24
+const SPIKE_W := 6.0
+const CHASER_H := {"golem": 20.0, "mummy": 19.0, "cobra": 17.0}
 
 const COLS := 8
 const ROWS := 9
@@ -27,19 +30,27 @@ const LEVELS := [
 		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
 	{"name": "Crystal Cave", "theme": "crystal", "moves": 29, "shaft": [5, 6], "room": "left", "fill_top": 15,
 		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
-	{"name": "Emerald Quarry", "theme": "emerald", "moves": 28, "shaft": [1, 2], "room": "right", "fill_top": 11,
+	{"name": "Lava Forge", "theme": "emerald", "moves": 28, "shaft": [1, 2], "room": "right", "fill_top": 11,
 		"rubble": [[1, 2, 0, 2], [0, 3, 3, 4], [3, 3, 5, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
+	{"name": "Mummy's Tomb", "theme": "tomb", "moves": 28, "shaft": [2, 3], "room": "right", "fill_top": 13,
+		"rubble": [[2, 3, 0, 3], [3, 5, 4, 5], [5, 6, 6, 8]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
+	{"name": "Cobra Temple", "theme": "temple", "moves": 30, "shaft": [4, 5], "room": "left", "fill_top": 14,
+		"rubble": [[4, 5, 0, 2], [3, 6, 3, 3], [2, 3, 4, 6], [6, 7, 4, 6], [4, 5, 7, 8]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
 ]
 
 const THEMES := {
-	"sand": {"grains": [Color("f0c46a"), Color("d99a3c"), Color("f8dc94")], "grain": "ball", "glow": 0.0,
-		"room": Color("3d2617"), "recess": [Color("24150d"), Color("0f0806")], "ui": Color("e1a64a")},
-	"iron": {"grains": [Color("8d94a3"), Color("666c79"), Color("b3b9c4")], "grain": "ball", "glow": 0.0,
-		"room": Color("262c38"), "recess": [Color("151a22"), Color("07090d")], "ui": Color("8b919c")},
-	"crystal": {"grains": [Color("a463f2"), Color("7a3bd1"), Color("d6a6ff")], "grain": "shard", "glow": 0.35,
-		"room": Color("2b1c40"), "recess": [Color("170b25"), Color("07030c")], "ui": Color("a463f2")},
-	"emerald": {"grains": [Color("3fd08a"), Color("23a368"), Color("9af5c6")], "grain": "shard", "glow": 0.3,
-		"room": Color("132c27"), "recess": [Color("0a1d18"), Color("030a08")], "ui": Color("3fd08a")},
+	"sand": {"room": "sand", "room_tint": Color(1, 1, 1), "floor": 861.0, "grains": "sand", "gtint": Color(1, 1, 1), "glow": 0.0,
+		"glow_col": Color(1, 1, 1), "recess": [Color("24150d"), Color("0f0806")], "ui": Color("e1a64a")},
+	"iron": {"room": "water", "room_tint": Color(1, 1, 1), "floor": 873.0, "grains": "iron", "gtint": Color(1.05, 1.05, 1.1), "glow": 0.0,
+		"glow_col": Color(1, 1, 1), "recess": [Color("151a22"), Color("07090d")], "ui": Color("8b919c")},
+	"crystal": {"room": "crystal", "room_tint": Color(1, 1, 1), "floor": 823.0, "grains": "crystal", "gtint": Color(1, 1, 1), "glow": 0.18,
+		"glow_col": Color("c48bff"), "recess": [Color("170b25"), Color("07030c")], "ui": Color("a463f2")},
+	"emerald": {"room": "lava", "room_tint": Color(1, 1, 1), "floor": 838.0, "grains": "emerald", "gtint": Color(1, 1, 1), "glow": 0.15,
+		"glow_col": Color("5df2a8"), "recess": [Color("1d0c08"), Color("080302")], "ui": Color("3fd08a")},
+	"tomb": {"room": "sand", "room_tint": Color(0.58, 0.62, 0.86), "floor": 861.0, "grains": "sand", "gtint": Color(0.82, 0.8, 0.78), "glow": 0.0,
+		"glow_col": Color(1, 1, 1), "recess": [Color("141220"), Color("06050c")], "ui": Color("5fd6d0")},
+	"temple": {"room": "water", "room_tint": Color(0.72, 1.0, 0.78), "floor": 873.0, "grains": "emerald", "gtint": Color(1, 1, 1), "glow": 0.12,
+		"glow_col": Color("5df2a8"), "recess": [Color("0a1d18"), Color("030a08")], "ui": Color("2fbf7a")},
 }
 
 const GEM_COLORS := [Color("ff5a6e"), Color("3a8dff"), Color("ffc21a"), Color("36d27d")]
@@ -108,14 +119,14 @@ var tweens: Array = []
 var parts: Array = []
 var fx: Array = []
 
-var progress = {"best": [0, 0, 0, 0]}
+var progress = {"best": [0, 0, 0, 0, 0, 0]}
 const SAVE_PATH := "user://progress.cfg"
 
 # ---------- nodes ----------
 var bg_layer: Node2D
 var back_layer: Node2D
 var hero: Rig
-var golem: Rig
+var chasers := {}
 var hz_layer: Node2D
 var hz_p := 0.0
 var hz_target := 0.0
@@ -125,7 +136,7 @@ var hero_alpha := 1.0
 var look_t := 0.0
 var look_cd := 3.0
 var blink_t := 2.0
-var golem_phase := 0.0
+var chaser_phase := 0.0
 var golem_attack := 0.0
 var roar_t := 3.0
 var ember_t := 0.0
@@ -156,11 +167,15 @@ func _ready() -> void:
 
 	bg_layer = _layer(_draw_bg)
 	back_layer = _layer(_draw_back)
-	golem = Rig.new()
-	golem.setup(RigData.GOLEM, "golem_", Color(0.72, 0.66, 0.8))
-	add_child(golem)
+	for kname in RigData.CHASERS:
+		var pp := Puppet.new()
+		pp.setup(RigData.CHASERS[kname])
+		pp.visible = false
+		pp.z_index = 3
+		add_child(pp)
+		chasers[kname] = pp
 	hero = Rig.new()
-	hero.setup(RigData.HERO, "hero_")
+	hero.setup(RigData.HERO)
 	add_child(hero)
 	hz_layer = _layer(_draw_hazard)
 	sand_sprite = Sprite2D.new()
@@ -180,7 +195,6 @@ func _ready() -> void:
 	# explicit draw order (rig parts add their own small z offsets)
 	bg_layer.z_index = 0
 	back_layer.z_index = 1
-	golem.z_index = 3
 	hero.z_index = 10
 	hz_layer.z_index = 16
 	sand_sprite.z_index = 20
@@ -209,12 +223,16 @@ func _layer(fn: Callable) -> Node2D:
 	return n
 
 func _load_textures() -> void:
-	var names = ["red", "blue", "yellow", "green", "rocket", "bomb", "light", "tile",
-		"door", "torch", "spike", "grain_ball",
-		"grain_shard", "goldbar", "wall_sand", "wall_iron", "wall_crystal", "wall_emerald"]
-	for n in names:
-		tex[n] = load("res://assets/gfx/%s.png" % n)
-	tex.gems = [tex.red, tex.blue, tex.yellow, tex.green]
+	tex.goldbar = load("res://assets/gfx/goldbar.png")
+	for n in ["gem_red", "gem_blue", "gem_gold", "gem_green", "rocket", "bomb", "light", "tile"]:
+		tex[n] = load("res://assets/gfx/board/%s.png" % n)
+	for n in ["sand", "iron", "crystal", "emerald"]:
+		tex["grains_" + n] = load("res://assets/gfx/board/grains_%s.png" % n)
+	for n in ["sand", "water", "crystal", "lava"]:
+		tex["room_" + n] = load("res://assets/gfx/rooms/room_%s.jpg" % n)
+	for n in ["door", "spikewall", "spout_lion", "spout_ram"]:
+		tex[n] = load("res://assets/gfx/props/%s.png" % n)
+	tex.gems = [tex.gem_red, tex.gem_blue, tex.gem_gold, tex.gem_green]
 	var gt := GradientTexture2D.new()
 	gt.width = 128
 	gt.height = 128
@@ -255,9 +273,10 @@ func buzz(ms: int) -> void:
 func _load_progress() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(SAVE_PATH) == OK:
-		var b = cf.get_value("progress", "best", [0, 0, 0, 0])
-		if b is Array and b.size() == 4:
-			progress.best = b
+		var b = cf.get_value("progress", "best", [])
+		if b is Array:
+			for i in mini(b.size(), progress.best.size()):
+				progress.best[i] = int(b[i])
 
 func save_progress() -> void:
 	var cf := ConfigFile.new()
@@ -361,23 +380,24 @@ func start_level(i: int) -> void:
 	hero_pose = "push"
 	hz_p = 0.0
 	hz_target = 0.0
-	hero_x = door_col + 0.5 - facing * 5.4
+	hero_x = door_col + 0.5 - facing * 4.4
 	hero_lift = 0.0
 	hero_alpha = 1.0
 	golem_attack = 0.0
 	look_t = 0.0
-	golem.visible = L.hazard == "golem"
+	for kname in chasers:
+		chasers[kname].visible = kname == L.hazard
+	chaser_phase = 0.0
 	sand_sleep = false
 	sand_dirty = true
 	_fill_board()
 	var sm: ShaderMaterial = sand_sprite.material
-	sm.set_shader_parameter("grain_tex", tex.grain_ball if theme.grain == "ball" else tex.grain_shard)
-	sm.set_shader_parameter("col1", theme.grains[0])
-	sm.set_shader_parameter("col2", theme.grains[1])
-	sm.set_shader_parameter("col3", theme.grains[2])
+	sm.set_shader_parameter("grain_tex", tex["grains_" + theme.grains])
+	sm.set_shader_parameter("tint", theme.gtint)
 	sm.set_shader_parameter("glow", theme.glow)
-	sm.set_shader_parameter("gsize", 1.5 if theme.grain == "ball" else 1.7)
-	sm.set_shader_parameter("brightness", 1.2 if theme.grain == "ball" else 1.05)
+	sm.set_shader_parameter("glow_col", theme.glow_col)
+	sm.set_shader_parameter("gsize", 1.65)
+	sm.set_shader_parameter("brightness", 1.0)
 	_upload_sand()
 	_place_hero()
 	bg_layer.queue_redraw()
@@ -653,7 +673,7 @@ func damage_rubble(id: int) -> void:
 				var a = -PI / 2.0 + (randf() - 0.5) * 2.2
 				var sp = (120.0 + randf() * 260.0) * g / 6.0
 				parts.append({"x": wx(x + 0.5), "y": wy(y + 0.5), "vx": cos(a) * sp, "vy": sin(a) * sp, "life": 0.0,
-					"max": 0.7 + randf() * 0.4, "col": theme.grains[v - 1], "size": g * 1.4, "grav": 900.0 * g / 6.0, "kind": "grain"})
+					"max": 0.7 + randf() * 0.4, "col": theme.gtint, "v": v, "size": g * 1.4, "grav": 900.0 * g / 6.0, "kind": "grain"})
 	if hit > 0:
 		sand_sleep = false
 		sand_dirty = true
@@ -1101,7 +1121,7 @@ func _win() -> void:
 			var x = i % SW
 			var y = i / SW
 			parts.append({"x": wx(x + 0.5), "y": wy(y + 0.5), "vx": (randf() - 0.5) * 200.0 * g / 6.0, "vy": (-200.0 - randf() * 200.0) * g / 6.0,
-				"life": 0.0, "max": 0.8, "col": theme.grains[v - 1], "size": g * 1.4, "grav": 900.0 * g / 6.0, "kind": "grain"})
+				"life": 0.0, "max": 0.8, "col": theme.gtint, "v": v, "size": g * 1.4, "grav": 900.0 * g / 6.0, "kind": "grain"})
 		)
 	await wait(minf(0.8, rest.size() * 0.008) + 0.2)
 	grains = 0
@@ -1184,7 +1204,7 @@ func plus_five() -> void:
 				grains -= 1
 				if randf() < 0.3:
 					parts.append({"x": wx(x + 0.5), "y": wy(y + 0.5), "vx": (randf() - 0.5) * 160.0 * g / 6.0, "vy": (-150.0 - randf() * 150.0) * g / 6.0,
-						"life": 0.0, "max": 0.6, "col": theme.grains[v - 1], "size": g * 1.3, "grav": 900.0 * g / 6.0, "kind": "grain"})
+						"life": 0.0, "max": 0.6, "col": theme.gtint, "v": v, "size": g * 1.3, "grav": 900.0 * g / 6.0, "kind": "grain"})
 	_set_room_mask(0)
 	sand_dirty = true
 	door_open = false
@@ -1438,8 +1458,8 @@ func _place_hero() -> void:
 	_anim(0.0)
 
 # ---------- characters: bone-rig animation ----------
-const PUSH_POSE := {"torso": 0.3, "head": -0.22, "arm_up_f": -1.72, "arm_lo_f": 0.28, "arm_up_b": -1.62, "arm_lo_b": 0.2,
-	"leg_up_f": -0.62, "leg_lo_f": 0.55, "leg_up_b": 0.2, "leg_lo_b": 0.12}
+const PUSH_POSE := {"torso": 0.28, "head": -0.22, "arm_up_f": -1.75, "arm_lo_f": 0.25, "arm_up_b": -1.6, "arm_lo_b": 0.2,
+	"leg_up_f": -0.5, "leg_lo_f": 0.25, "leg_up_b": 0.2, "leg_lo_b": 0.08}
 
 func _hero_target(t: float) -> Dictionary:
 	var st := hero_strain
@@ -1457,11 +1477,11 @@ func _hero_target(t: float) -> Dictionary:
 			return d
 		"scared":
 			var w := sin(t * 38.0) * 0.05
-			return {"torso": -0.18 + w, "head": 0.3, "arm_up_f": -2.55, "arm_lo_f": -1.5 + w, "arm_up_b": -2.25, "arm_lo_b": -1.6 - w,
-				"leg_up_f": 0.35, "leg_lo_f": 0.25, "leg_up_b": -0.05, "leg_lo_b": 0.35}
+			return {"torso": -0.15 + w, "head": 0.25, "arm_up_f": -2.0, "arm_lo_f": -0.9 + w, "arm_up_b": -2.2, "arm_lo_b": -0.8 - w,
+				"leg_up_f": 0.25, "leg_lo_f": 0.15, "leg_up_b": -0.1, "leg_lo_b": 0.2}
 		"cheer":
 			var wv := sin(t * 9.0) * 0.25
-			return {"torso": -0.05, "head": -0.1, "arm_up_f": -2.7 + wv, "arm_lo_f": 0.35, "arm_up_b": -2.9 - wv, "arm_lo_b": 0.25,
+			return {"torso": -0.05, "head": -0.1, "arm_up_f": 2.55 + wv, "arm_lo_f": -0.35, "arm_up_b": -2.6 - wv, "arm_lo_b": 0.3,
 				"leg_up_f": -0.15, "leg_lo_f": 0.1, "leg_up_b": 0.12, "leg_lo_b": 0.05}
 		"run":
 			var ph := t * 13.0
@@ -1470,7 +1490,7 @@ func _hero_target(t: float) -> Dictionary:
 			return {"torso": lean, "head": -0.18, "arm_up_f": -sw * 1.0 - lean, "arm_lo_f": -1.1, "arm_up_b": sw * 1.0 - lean, "arm_lo_b": -1.1,
 				"leg_up_f": sw * 0.8 - lean, "leg_lo_f": maxf(0.0, -cos(ph)) * 1.1, "leg_up_b": -sw * 0.8 - lean, "leg_lo_b": maxf(0.0, cos(ph)) * 1.1}
 		"jump":
-			return {"torso": -0.1, "head": -0.3, "arm_up_f": -2.9, "arm_lo_f": 0.2, "arm_up_b": -2.8, "arm_lo_b": 0.2,
+			return {"torso": -0.1, "head": -0.3, "arm_up_f": 2.7, "arm_lo_f": -0.2, "arm_up_b": -2.8, "arm_lo_b": 0.2,
 				"leg_up_f": -0.5, "leg_lo_f": 0.9, "leg_up_b": 0.3, "leg_lo_b": 0.7}
 	return {}
 
@@ -1486,39 +1506,54 @@ func _hero_face() -> String:
 		return "blink"
 	return "strain" if hero_strain > 0.25 or hz_p > 0.5 else "neutral"
 
-func _golem_target(t: float, speed: float) -> Dictionary:
-	var ph := golem_phase
+func _chaser_target(kind: String, t: float, speed: float) -> Dictionary:
+	var ph := chaser_phase
 	var sw := sin(ph)
-	var breathe := sin(t * 2.2) * 0.04
-	var d := {"body": 0.06 + breathe + absf(sw) * 0.04, "head": -0.05 - breathe, "jaw": 0.0,
-		"arm_up_f": -sw * 0.45 * speed - 0.15, "arm_lo_f": -0.35, "arm_up_b": sw * 0.45 * speed - 0.1, "arm_lo_b": -0.3,
-		"leg_f": sw * 0.42 * speed, "leg_b": -sw * 0.42 * speed}
-	if roar_t < 0.9:
-		d.jaw = 0.45 * sin(clampf(roar_t / 0.9, 0.0, 1.0) * PI)
-		d.head -= d.jaw * 0.4
-	if golem_attack > 0.0:
-		var a := golem_attack
-		var up := clampf(a * 2.0, 0.0, 1.0)
-		var down := clampf((a - 0.5) * 3.0, 0.0, 1.0)
-		var arm := lerpf(-0.2, -3.0, up) + down * 2.3
-		d.arm_up_f = arm
-		d.arm_up_b = arm + 0.2
-		d.arm_lo_f = -0.4
-		d.arm_lo_b = -0.4
-		d.jaw = 0.5
-		d.body = 0.25 * down - 0.1 * up
-	return d
+	var br := sin(t * 2.2)
+	var a := golem_attack
+	var up := clampf(a * 2.0, 0.0, 1.0)
+	var down := clampf((a - 0.5) * 3.0, 0.0, 1.0)
+	match kind:
+		"golem":
+			var d := {"pelvis": sw * 0.03 * speed, "chest": 0.04 + br * 0.02, "head": -br * 0.04 + (0.15 if roar_t < 0.9 else 0.0),
+				"arm_f": -sw * 0.18 * speed, "arm_b": sw * 0.18 * speed, "leg_f": sw * 0.1 * speed, "leg_b": -sw * 0.1 * speed}
+			if a > 0.0:
+				d.arm_f = lerpf(0.0, -1.0, up) + down * 0.9
+				d.arm_b = lerpf(0.0, -0.85, up) + down * 0.8
+				d.chest = 0.22 * down - 0.08 * up
+			return d
+		"mummy":
+			var d := {"pelvis": sw * 0.04 * speed, "chest": 0.08 + sin(ph * 2.0) * 0.04, "head": sin(t * 3.0) * 0.08,
+				"arm_b": -0.05 + sin(t * 4.0) * 0.08, "arm_f": 0.05 + sin(t * 4.0 + 1.0) * 0.08,
+				"leg_f": -sw * 0.28 * speed, "leg_b": sw * 0.28 * speed}
+			if a > 0.0:
+				d.chest = 0.25 * up
+				d.arm_b = -0.35 * up
+				d.arm_f = -0.3 * up
+			return d
+		"cobra":
+			var d := {"coil": 0.0, "neck1": sin(t * 2.0) * 0.1, "neck2": sin(t * 2.0 - 0.8) * 0.14, "head": sin(t * 2.0 - 1.6) * 0.12}
+			if a > 0.0:
+				d.neck1 += 0.3 * up - 0.1 * down
+				d.neck2 += 0.4 * up
+				d.head += 0.25 * up
+			return d
+	return {}
+
+func _hazard_width() -> float:
+	var hz: String = L.get("hazard", "")
+	if hz == "spikes":
+		return SPIKE_W
+	if chasers.has(hz):
+		var pp: Puppet = chasers[hz]
+		return pp.size.x * CHASER_H[hz] / pp.size.y
+	return 0.0
 
 func _hazard_front() -> float:
 	# x (world cells) of the hazard's leading edge
 	var far = room.x0 if facing > 0 else room.x1
 	var back := hero_x - facing * 3.2
-	var base := 0.0
-	match L.get("hazard", ""):
-		"spikes":
-			base = 5.6
-		"golem":
-			base = 9.5
+	var base := _hazard_width() + 0.4
 	var dist := absf(back - far)
 	return far + facing * (base + hz_p * maxf(0.0, dist - base))
 
@@ -1542,7 +1577,7 @@ func _anim(dt: float) -> void:
 	var k: float = 1.0 if dt == 0.0 else minf(1.0, dt * 14.0)
 	hero.pose(_hero_target(hero_t), k)
 	hero.set_face(_hero_face())
-	var s := HERO_H * g / 653.0
+	var s := HERO_H * g / HERO_PX
 	hero.scale = Vector2(s * facing, s)
 	var bob := 0.0
 	match hero_pose:
@@ -1554,23 +1589,25 @@ func _anim(dt: float) -> void:
 			bob = -absf(sin(hero_t * 13.0)) * 0.7
 		"scared":
 			bob = sin(hero_t * 40.0) * 0.15
-	hero.position = Vector2(wx(hero_x), wy(BY - 1.25 - hero_lift - bob) - 181.0 * s)
+	hero.position = Vector2(wx(hero_x), wy(BY - 1.25 - hero_lift - bob) - hero.foot_drop() * s)
 	hero.modulate.a = hero_alpha
-	# golem
-	if L.get("hazard", "") == "golem":
-		golem_phase += hz_speed * 9.0 * dt
+	# chaser (golem, mummy, cobra)
+	var hz: String = L.get("hazard", "")
+	if chasers.has(hz):
+		var pp: Puppet = chasers[hz]
+		chaser_phase += hz_speed * 9.0 * dt + dt * 0.6
 		roar_t += dt
 		if roar_t > 4.5 + randf() * 3.0 and hz_p > 0.15:
 			roar_t = 0.0
-			play("boom", 0.45, -12.0)
+			play("boom", 0.45 if hz == "golem" else 0.8, -12.0)
 		if state == "lost":
 			golem_attack = minf(1.0, golem_attack + dt * 1.2)
-		var gs := GOLEM_H * g / 639.0
 		var gk: float = 1.0 if dt == 0.0 else minf(1.0, dt * 10.0)
-		golem.pose(_golem_target(hero_t, clampf(hz_speed * 6.0, 0.0, 1.0)), gk)
-		golem.scale = Vector2(gs * facing, gs)
-		var gx := _hazard_front() - facing * 5.5
-		golem.position = Vector2(wx(gx), wy(BY - 1.2 - absf(sin(golem_phase)) * 0.4) - 213.0 * gs)
+		pp.pose(_chaser_target(hz, hero_t, clampf(hz_speed * 6.0, 0.25, 1.0)), gk)
+		var cs: float = CHASER_H[hz] * g / pp.size.y
+		var lead := wx(_hazard_front())
+		var hop: float = absf(sin(chaser_phase)) * 0.3 if hz == "golem" else 0.0
+		pp.place(Vector2(lead - facing * pp.front_offset(cs), wy(BY - 1.1 - hop)), cs, facing)
 	# lava embers
 	if L.get("hazard", "") == "lava" and dt > 0.0:
 		ember_t -= dt
@@ -1594,31 +1631,21 @@ func _draw_hazard(ci: CanvasItem) -> void:
 			_draw_lava(ci)
 
 func _draw_spike_wall(ci: CanvasItem) -> void:
-	var far = room.x0 if facing > 0 else room.x1
 	var front := _hazard_front()
-	var spike_len := 4.4
-	var plate := front - facing * spike_len
-	var y0: float = room.y0 + 1.0
-	var y1: float = BY - 0.2
-	var xa := minf(far, plate)
-	var xb := maxf(far, plate) + 0.0
-	var r: Rect2 = Rect2(wx(xa), wy(y0), maxf(1.0, (xb - xa)) * g + g * 1.2 * (1 if facing > 0 else 0), (y1 - y0) * g)
-	if facing < 0:
-		r.position.x -= g * 1.2
-		r.size.x += g * 1.2
-	_vgrad(ci, r, Color("6b6f7a"), Color("3a3d45"))
-	var edge_x: float = wx(plate) + (g * 1.2 if facing > 0 else -g * 1.2)
-	ci.draw_rect(Rect2(Vector2(minf(edge_x, wx(plate)), wy(y0)), Vector2(g * 1.2, (y1 - y0) * g)), Color("8b909c"))
-	for k in 6:
-		var y := y0 + (y1 - y0) * (0.1 + k * 0.16)
-		ci.draw_circle(Vector2((edge_x + wx(plate)) / 2.0, wy(y)), g * 0.35, Color("c9ccd4"))
-		var sz := Vector2(spike_len * g, g * 2.0)
-		if facing > 0:
-			ci.draw_texture_rect(tex.spike, Rect2(Vector2(edge_x - g * 0.4, wy(y) - sz.y / 2.0), sz), false)
-		else:
-			ci.draw_set_transform(Vector2(edge_x + g * 0.4, wy(y)), 0.0, Vector2(-1, 1))
-			ci.draw_texture_rect(tex.spike, Rect2(Vector2(0, -sz.y / 2.0), sz), false)
-			ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var y0: float = room.y0 + 1.2
+	var y1: float = BY - 0.6
+	var w := SPIKE_W * g
+	var h := (y1 - y0) * g
+	if facing > 0:
+		ci.draw_texture_rect(tex.spikewall, Rect2(Vector2(wx(front) - w, wy(y0)), Vector2(w, h)), false)
+	else:
+		ci.draw_set_transform(Vector2(wx(front) + w, wy(y0)), 0.0, Vector2(-1, 1))
+		ci.draw_texture_rect(tex.spikewall, Rect2(Vector2.ZERO, Vector2(w, h)), false)
+		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _spout_pos() -> Vector2:
+	var far = room.x0 if facing > 0 else room.x1
+	return Vector2(wx(far + facing * 3.4), wy(room.y0 + 5.5))
 
 func _draw_water(ci: CanvasItem) -> void:
 	var x0 := wx(room.x0)
@@ -1626,11 +1653,9 @@ func _draw_water(ci: CanvasItem) -> void:
 	var room_h := float(room.y1 - room.y0)
 	var level: float = BY - (0.6 + hz_p * room_h * 0.72)
 	# inflow from a pipe high on the far wall
-	var far = room.x0 if facing > 0 else room.x1
-	var px := wx(far + facing * 2.2)
-	var py := wy(room.y0 + 3.5)
-	ci.draw_circle(Vector2(px, py), g * 1.5, Color("2a2f3a"))
-	ci.draw_circle(Vector2(px, py), g * 1.0, Color("10141c"))
+	var sp := _spout_pos()
+	var px := sp.x
+	var py := sp.y + g * 1.2
 	if hz_p < 0.999 or state == "lost":
 		var wob := sin(time * 9.0) * g * 0.2
 		ci.draw_rect(Rect2(Vector2(px - g * 0.7 + wob, py), Vector2(g * 1.4, wy(level) - py)), Color(0.45, 0.75, 1.0, 0.55))
@@ -1661,9 +1686,9 @@ func _draw_lava(ci: CanvasItem) -> void:
 	var front := _hazard_front()
 	var h := 2.2 + hz_p * 2.6
 	# lava pouring from the far wall
-	var px := wx(far + facing * 2.0)
-	var py := wy(room.y0 + 4.0)
-	ci.draw_circle(Vector2(px, py), g * 1.5, Color("2a1a14"))
+	var sp := _spout_pos()
+	var px := sp.x
+	var py := sp.y + g * 1.2
 	if hz_p > 0.0:
 		var wob := sin(time * 7.0) * g * 0.2
 		_vgrad(ci, Rect2(Vector2(px - g * 0.75 + wob, py), Vector2(g * 1.5, wy(BY - h) - py + g)), Color(1.0, 0.85, 0.3), Color(1.0, 0.45, 0.08))
@@ -1709,15 +1734,16 @@ func _draw_bg(ci: CanvasItem) -> void:
 	var W = SW * g
 	var H = SH * g
 	var world := Rect2(ox, oy, W, H)
-	var wall: Texture2D = tex["wall_" + L.theme]
-	ci.draw_texture_rect(wall, world, false)
-	# darken top for depth
-	_vgrad(ci, Rect2(ox, oy, W, BY * g * 0.6), Color(0, 0, 0, 0.45), Color(0, 0, 0, 0))
-	_vgrad(ci, Rect2(ox, oy + H * 0.85, W, H * 0.15), Color(0, 0, 0, 0), Color(0, 0, 0, 0.35))
-	# room
+	ci.draw_rect(world, Color("0c0816"))
+	var rt: Texture2D = tex["room_" + theme.room]
+	var k: float = rt.get_width() / float(SW)
+	var src_top: float = theme.floor - (BY - 2.5) * k
+	var rows: float = minf(float(SH), (rt.get_height() - src_top) / k)
+	ci.draw_texture_rect_region(rt, Rect2(ox, oy, W, rows * g), Rect2(0, src_top, rt.get_width(), rows * k), theme.room_tint)
+	# soften the top and darken outside the room so Zaki's alcove reads first
+	_vgrad(ci, Rect2(ox, oy, W, BY * g * 0.45), Color(0, 0, 0, 0.5), Color(0, 0, 0, 0))
 	var rr = Rect2(wx(room.x0), wy(room.y0), (room.x1 - room.x0) * g, (room.y1 - room.y0) * g)
-	_vgrad(ci, rr, theme.room.darkened(0.35), theme.room)
-	ci.draw_rect(Rect2(rr.position, Vector2(rr.size.x, g * 1.2)), Color(0, 0, 0, 0.35))
+	_vgrad(ci, Rect2(rr.position, Vector2(rr.size.x, g * 3.0)), Color(0, 0, 0, 0.4), Color(0, 0, 0, 0))
 	# shaft recess
 	var sr = Rect2(wx(shaft.x0), wy(shaft.y0), (shaft.x1 - shaft.x0) * g, (BY - shaft.y0) * g)
 	_vgrad(ci, sr, theme.recess[1], theme.recess[0])
@@ -1743,22 +1769,13 @@ func _draw_bg(ci: CanvasItem) -> void:
 func _draw_back(ci: CanvasItem) -> void:
 	if L.is_empty():
 		return
-	# torch on the far wall of the room
-	var rx = wx(room.x0)
-	var rw: float = (room.x1 - room.x0) * g
-	var tx: float = rx + rw * (0.22 if facing > 0 else 0.78)
-	var ty = wy(room.y0 + 6)
-	var tsz := Vector2(g * 3.0, g * 6.0)
-	ci.draw_texture_rect(tex.torch, Rect2(Vector2(tx, ty) - Vector2(tsz.x / 2, tsz.y * 0.35), tsz), false)
-	var fl = 1.0 + sin(hero_t * 17.0) * 0.12 + sin(hero_t * 7.0) * 0.08
-	var fpts := PackedVector2Array()
-	var fc := Vector2(tx, ty - g * 1.4)
-	for k in 16:
-		var a = TAU * k / 16.0
-		var rr = g * (0.95 + 0.7 * maxf(0.0, -sin(a)) * fl)
-		fpts.append(fc + Vector2(cos(a) * g * 0.95, sin(a) * rr))
-	ci.draw_colored_polygon(fpts, Color("ff8a1a"))
-	ci.draw_circle(fc + Vector2(0, g * 0.3), g * 0.5, Color("ffe27a"))
+	# water / lava spout on the far wall of the room
+	var hz: String = L.get("hazard", "")
+	if hz == "water" or hz == "lava":
+		var t: Texture2D = tex.spout_lion if hz == "water" else tex.spout_ram
+		var sz := Vector2(g * 6.0, g * 6.0 * t.get_height() / t.get_width())
+		var sp := _spout_pos()
+		ci.draw_texture_rect(t, Rect2(sp - Vector2(sz.x / 2.0, sz.y * 0.55), sz), false)
 
 func _draw_frame(ci: CanvasItem) -> void:
 	if L.is_empty():
@@ -1797,12 +1814,12 @@ func _draw_door(ci: CanvasItem) -> void:
 	if door_open:
 		var side = facing if state == "won" else -facing
 		ci.draw_set_transform(Vector2(x + side * g * 5.0, bot - g * 0.8), PI / 2.0 + side * 0.12, Vector2.ONE)
-		ci.draw_texture_rect(tex.door, Rect2(Vector2(-g * 0.8, -h / 2.0), Vector2(g * 1.6, h)), false, Color(0.85, 0.85, 0.85))
+		ci.draw_texture_rect(tex.door, Rect2(Vector2(-g * 1.5, -h / 2.0), Vector2(g * 3.0, h)), false, Color(0.85, 0.85, 0.85))
 		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 	var bulge = -facing * hero_strain * g * 0.6 + sin(hero_t * 30.0) * hero_strain * g * 0.12
 	ci.draw_set_transform(Vector2(x + bulge, (top + bot) / 2.0), -facing * hero_strain * 0.03, Vector2.ONE)
-	ci.draw_texture_rect(tex.door, Rect2(Vector2(-g * 0.9, -h / 2.0), Vector2(g * 1.8, h)), false)
+	ci.draw_texture_rect(tex.door, Rect2(Vector2(-g * 1.5, -h / 2.0), Vector2(g * 3.0, h)), false)
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _gem_tex(m: Gem) -> Texture2D:
@@ -1815,7 +1832,7 @@ func _gem_tex(m: Gem) -> Texture2D:
 			return tex.bomb
 		"light":
 			return tex.light
-	return tex.red
+	return tex.gem_red
 
 func _draw_gems(ci: CanvasItem) -> void:
 	if grid.is_empty():
@@ -1892,10 +1909,12 @@ func _draw_fx(ci: CanvasItem) -> void:
 		var a: float = maxf(0.0, 1.0 - pt.life / pt.max)
 		match pt.kind:
 			"grain":
-				var gt: Texture2D = tex.grain_ball if theme.get("grain", "ball") == "ball" else tex.grain_shard
+				var gt: Texture2D = tex["grains_" + theme.grains]
 				var c: Color = pt.col
 				c.a = a
-				_draw_tex_centered(ci, gt, Vector2(pt.x, pt.y), Vector2(pt.size, pt.size), 0.0, c * Color(1.25, 1.25, 1.25, 1))
+				var cw: float = gt.get_height()
+				var sz: float = pt.size * 1.2
+				ci.draw_texture_rect_region(gt, Rect2(Vector2(pt.x, pt.y) - Vector2(sz, sz) / 2.0, Vector2(sz, sz)), Rect2((pt.get("v", 1) - 1) * cw, 0, cw, cw), c)
 			"star":
 				var s: float = pt.size * a
 				var col: Color = pt.col
@@ -1912,21 +1931,11 @@ func _draw_fx(ci: CanvasItem) -> void:
 func _draw_add(ci: CanvasItem) -> void:
 	if L.is_empty():
 		return
-	# warm torch light in the room
-	var rx = wx(room.x0)
-	var rw: float = (room.x1 - room.x0) * g
-	var tx: float = rx + rw * (0.22 if facing > 0 else 0.78)
-	var ty = wy(room.y0 + 4.5)
-	var fl = 1.0 + sin(hero_t * 11.0) * 0.06
-	_draw_tex_centered(ci, glow_tex, Vector2(tx, ty), Vector2(rw, rw) * 1.1 * fl, 0.0, Color(1.0, 0.55, 0.2, 0.35))
 	if L.get("hazard", "") == "lava" and hz_p > 0.0:
 		var far = room.x0 if facing > 0 else room.x1
 		var mid := wx((far + _hazard_front()) / 2.0)
 		var wdt := absf(_hazard_front() - far) * g
 		_draw_tex_centered(ci, glow_tex, Vector2(mid, wy(BY - 2.0)), Vector2(wdt * 1.6 + g * 8.0, g * 14.0), 0.0, Color(1.0, 0.45, 0.1, 0.55))
-	if L.get("hazard", "") == "golem":
-		var gx := wx(_hazard_front() - facing * 3.6)
-		_draw_tex_centered(ci, glow_tex, Vector2(gx, wy(BY - GOLEM_H * 0.8)), Vector2(g, g) * 9.0, 0.0, Color(0.7, 0.4, 1.0, 0.25 + 0.1 * sin(time * 3.0)))
 	for f in fx:
 		if f.kind == "flash":
 			var p: float = f.life / f.max
@@ -1938,7 +1947,7 @@ func _draw_add(ci: CanvasItem) -> void:
 		# crystal shimmer over the shaft
 		var sr = Rect2(wx(shaft.x0), wy(L.fill_top), (shaft.x1 - shaft.x0) * g, (BY - L.fill_top) * g)
 		var pulse = 0.10 + 0.05 * sin(time * 2.0)
-		var col: Color = theme.grains[0]
+		var col: Color = theme.glow_col
 		col.a = pulse * clampf(float(grains) / float(grains0) * 1.5, 0.0, 1.0)
 		_draw_tex_centered(ci, glow_tex, sr.get_center(), sr.size * 1.4, 0.0, col)
 	for p in parts:
