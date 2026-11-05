@@ -12,6 +12,8 @@ const HERO_H := 15.0      # hero height in world cells
 const HERO_PX := 1126.0   # hero height in rig pixels
 const ROOM_H := 24
 const SPIKE_W := 6.0
+const DOOR_EDGE_W := 2.6   # side view of the door, in cells
+const SAFE_H := 12.0       # safe exit door height, in cells
 const CHASER_H := {"golem": 20.0, "mummy": 19.0, "cobra": 17.0}
 
 const COLS := 8
@@ -24,17 +26,17 @@ const SH := 110        # world height, in debris cells
 const NCOL := 4
 
 const LEVELS := [
-	{"name": "The Sand Pit", "theme": "sand", "moves": 22, "shaft": [3, 5], "room": "left", "fill_top": 17,
+	{"name": "The Sand Pit", "time": 110, "theme": "sand", "moves": 22, "shaft": [3, 5], "room": "left", "fill_top": 17,
 		"rubble": [[3, 5, 0, 3], [4, 4, 4, 6]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
-	{"name": "Iron Vault", "theme": "iron", "moves": 28, "shaft": [3, 4], "room": "right", "fill_top": 12,
+	{"name": "Iron Vault", "time": 125, "theme": "iron", "moves": 28, "shaft": [3, 4], "room": "right", "fill_top": 12,
 		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
-	{"name": "Crystal Cave", "theme": "crystal", "moves": 32, "shaft": [5, 6], "room": "left", "fill_top": 15,
+	{"name": "Crystal Cave", "time": 145, "theme": "crystal", "moves": 32, "shaft": [5, 6], "room": "left", "fill_top": 15,
 		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
-	{"name": "Lava Forge", "theme": "emerald", "moves": 28, "shaft": [1, 2], "room": "right", "fill_top": 11,
+	{"name": "Lava Forge", "time": 135, "theme": "emerald", "moves": 28, "shaft": [1, 2], "room": "right", "fill_top": 11,
 		"rubble": [[1, 2, 0, 2], [0, 3, 3, 4], [3, 3, 5, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
-	{"name": "Mummy's Tomb", "theme": "tomb", "moves": 31, "shaft": [2, 3], "room": "right", "fill_top": 13,
+	{"name": "Mummy's Tomb", "time": 145, "theme": "tomb", "moves": 31, "shaft": [2, 3], "room": "right", "fill_top": 13,
 		"rubble": [[2, 3, 0, 3], [3, 5, 4, 5], [5, 6, 6, 8]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
-	{"name": "Cobra Temple", "theme": "temple", "moves": 35, "shaft": [4, 5], "room": "left", "fill_top": 20,
+	{"name": "Cobra Temple", "time": 165, "theme": "temple", "moves": 35, "shaft": [4, 5], "room": "left", "fill_top": 20,
 		"rubble": [[4, 5, 0, 2], [3, 6, 3, 3], [2, 3, 4, 6], [6, 7, 4, 6], [4, 5, 7, 8]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
 ]
 
@@ -137,6 +139,21 @@ var look_t := 0.0
 var look_cd := 3.0
 var blink_t := 2.0
 var chaser_phase := 0.0
+var time_left := 100.0
+var shaft_sand := 0
+var shaft0 := 1
+var door_swing := 0.0      # 0 closed (edge on) .. 1 swung open
+var safe_x := 0.0
+var safe_glow := 0.0
+var push_ph := 0.0
+var flinch := 0.0
+var pound_prev := 0.0
+var door_hit := 0.0
+var sweat_t := 1.0
+var hand_f := Vector2.ZERO
+var hand_b := Vector2.ZERO
+var hud_sec := -1
+var hud_pct := -1
 var golem_attack := 0.0
 var roar_t := 3.0
 var ember_t := 0.0
@@ -230,7 +247,7 @@ func _load_textures() -> void:
 		tex["grains_" + n] = load("res://assets/gfx/board/grains_%s.png" % n)
 	for n in ["sand", "water", "crystal", "lava"]:
 		tex["room_" + n] = load("res://assets/gfx/rooms/room_%s.jpg" % n)
-	for n in ["door", "spikewall", "spout_lion", "spout_ram"]:
+	for n in ["door", "door_edge", "door_full", "spikewall", "spout_lion", "spout_ram"]:
 		tex[n] = load("res://assets/gfx/props/%s.png" % n)
 	tex.gems = [tex.gem_red, tex.gem_blue, tex.gem_gold, tex.gem_green]
 	var gt := GradientTexture2D.new()
@@ -367,6 +384,8 @@ func start_level(i: int) -> void:
 				sand[y * SW + x] = 1 + randi() % 3
 				grains += 1
 	grains0 = grains
+	shaft0 = maxi(1, _count_shaft())
+	shaft_sand = shaft0
 	_compute_active_region()
 	moves = L.moves
 	door_open = false
@@ -380,7 +399,15 @@ func start_level(i: int) -> void:
 	hero_pose = "push"
 	hz_p = 0.0
 	hz_target = 0.0
-	hero_x = door_col + 0.5 - facing * 4.4
+	hero_x = _door_face() - facing * 3.9
+	door_swing = 0.0
+	safe_glow = 0.0
+	time_left = float(L.time)
+	flinch = 0.0
+	hud_sec = -1
+	hud_pct = -1
+	var sw_cells: float = SAFE_H * tex.door_full.get_width() / tex.door_full.get_height()
+	safe_x = (shaft.x1 - sw_cells / 2.0 - 0.6) if facing > 0 else (shaft.x0 + sw_cells / 2.0 + 0.6)
 	hero_lift = 0.0
 	hero_alpha = 1.0
 	golem_attack = 0.0
@@ -683,12 +710,29 @@ func damage_rubble(id: int) -> void:
 	_update_hud()
 
 func _update_hud() -> void:
-	if not L.is_empty() and state != "lost" and state != "won":
-		hz_target = clampf(1.0 - float(moves) / float(L.moves), 0.0, 1.0)
-	var p := 0
-	if grains0 > 0:
-		p = maxi(0, ceili(grains * 100.0 / grains0))
+	var p := maxi(0, ceili(shaft_sand * 100.0 / shaft0))
+	hud_pct = p
 	ui.update_hud(moves, p)
+
+func _count_shaft() -> int:
+	var n := 0
+	for y in range(shaft.y0, BY):
+		for x in range(shaft.x0, shaft.x1):
+			if sand[y * SW + x] != 0:
+				n += 1
+	return n
+
+func _door_face() -> float:
+	# x (cells) of the door's room-side face
+	return door_col + 0.5 - facing * DOOR_EDGE_W / 2.0
+
+func door_ready() -> bool:
+	return shaft_sand <= maxi(4, roundi(shaft0 * 0.02))
+
+func _danger_target() -> float:
+	var by_moves := 1.0 - float(moves) / float(L.moves)
+	var by_time := 1.0 - time_left / float(L.time)
+	return clampf(maxf(by_moves, by_time), 0.0, 1.0)
 
 # ---------- gravity / refill ----------
 func collapse() -> void:
@@ -1060,22 +1104,21 @@ func activate(c: int, r: int) -> void:
 	await cascade()
 	await end_turn()
 
-func win_threshold() -> int:
-	return maxi(12, roundi(grains0 * 0.03))
-
 func end_turn() -> void:
-	if grains <= win_threshold():
+	shaft_sand = _count_shaft()
+	if door_ready():
 		_win()
 		return
-	if moves <= 0:
+	if moves <= 0 or time_left <= 0.0:
 		state = "busy"
 		var t0 = time
 		while time - t0 < 1.6 and sand_moved > 0:
 			await wait(0.1)
-		if grains <= win_threshold():
+		shaft_sand = _count_shaft()
+		if door_ready():
 			_win()
 			return
-		_lose()
+		_lose(time_left <= 0.0 and moves > 0)
 		return
 	if find_move().is_empty() and has_special().x < 0:
 		await _shuffle()
@@ -1104,7 +1147,7 @@ func _shuffle() -> void:
 # ---------- win / lose ----------
 func _win() -> void:
 	state = "won"
-	hero_pose = "cheer"
+	await _escape()
 	var rest = []
 	for i in sand.size():
 		if sand[i] != 0:
@@ -1131,7 +1174,6 @@ func _win() -> void:
 	play("win")
 	buzz(60)
 	await collapse()
-	await _escape()
 	var ratio = float(moves) / float(L.moves)
 	var stars = 3 if ratio >= 0.3 else (2 if ratio >= 0.12 else 1)
 	if stars > int(progress.best[level_idx]):
@@ -1143,22 +1185,30 @@ func _win() -> void:
 	ui.show_win(stars, moves, L.name, level_idx < LEVELS.size() - 1)
 
 func _escape() -> void:
-	# the door gives way outward and Zaki runs for the shaft
-	await wait(0.5)
-	door_open = true
-	play("crack", 1.2, -4.0)
-	burst(wx(door_col + 0.5), wy(BY - 8), Color("8a5a2b"), 14, 1.2)
+	# the sand no longer holds the door: Zaki heaves it open and runs for the safe door
+	look_t = 0.0
+	hero_pose = "push"
+	await wait(0.3)
+	play("crack", 1.3, -6.0)
+	burst(wx(door_col + 0.5), wy(BY - 3), Color("c9a46a"), 12, 0.8)
+	tween(self, {"door_swing": 1.0}, 0.55, "out")
+	buzz(30)
+	await wait(0.35)
+	hero_pose = "cheer"
+	await wait(0.45)
 	hero_pose = "run"
-	var target: float = (shaft.x0 + shaft.x1) / 2.0
-	tween(self, {"hero_x": target}, 0.9, "lin")
-	await wait(0.9)
-	hero_pose = "jump"
-	play("shine", 1.3, -4.0)
-	tween(self, {"hero_lift": float(BY - shaft.y0) + 6.0}, 0.9, "in")
-	tween(self, {"hero_alpha": 0.0}, 0.3, "lin", 0.6)
-	for k in 12:
-		later(k * 0.06, func(): sparkle(wx(hero_x), wy(BY - hero_lift - 6.0), 2))
-	await wait(1.0)
+	var dist := absf(safe_x - hero_x)
+	var dur := dist / 11.0
+	tween(self, {"hero_x": safe_x}, dur, "lin")
+	tween(self, {"safe_glow": 1.0}, dur, "lin")
+	await wait(dur)
+	hero_pose = "cheer"
+	play("shine", 1.2, -4.0)
+	await wait(0.35)
+	tween(self, {"hero_alpha": 0.0}, 0.45, "lin")
+	for k in 10:
+		later(k * 0.05, func(): sparkle(wx(safe_x), wy(BY - SAFE_H * 0.5), 3))
+	await wait(0.6)
 
 func _set_room_mask(v: int) -> void:
 	for y in range(room.y0, room.y1):
@@ -1168,27 +1218,25 @@ func _set_room_mask(v: int) -> void:
 	_compute_active_region()
 	sand_sleep = false
 
-func _lose() -> void:
+func _lose(timed_out := false) -> void:
 	state = "lost"
 	hz_target = 1.12
 	hero_pose = "scared"
 	play("boom", 0.6, -6.0)
-	await wait(1.1)
-	door_open = true
-	_set_room_mask(1)
-	burst(wx(door_col + 0.5), wy(BY - 9), Color("8a5a2b"), 16, 1.4)
-	play("crack")
+	await wait(1.3)
 	shake = 0.4
 	buzz(80)
-	await wait(1.0)
 	play("lose")
-	await wait(0.8)
-	var left = ceili(grains * 100.0 / grains0) if grains > 0 else 0
-	ui.show_lose(left, not extra_used)
+	await wait(1.0)
+	var left = ceili(shaft_sand * 100.0 / shaft0) if shaft_sand > 0 else 0
+	ui.show_lose(left, not extra_used, "Time's up!" if timed_out else "Zaki got caught!")
 
 func plus_five() -> void:
 	extra_used = true
 	moves += 5
+	time_left += 25.0
+	hz_target = _danger_target()
+	hz_p = hz_target
 	ui.hide_overlay()
 	for y in range(room.y0, room.y1):
 		for x in range(room.x0 - 1, room.x1 + 1):
@@ -1393,6 +1441,23 @@ func _process(dt: float) -> void:
 			sand_dirty = true
 		if sand_dirty:
 			_upload_sand()
+		if not shaft.is_empty():
+			shaft_sand = _count_shaft()
+			var pc := maxi(0, ceili(shaft_sand * 100.0 / shaft0))
+			if pc != hud_pct:
+				_update_hud()
+		if state == "idle" or state == "busy":
+			time_left = maxf(0.0, time_left - dt)
+			hz_target = _danger_target()
+			if state == "idle" and door_ready():
+				_win()
+			elif state == "idle" and time_left <= 0.0:
+				state = "busy"
+				_lose(true)
+		var sec := ceili(time_left)
+		if sec != hud_sec:
+			hud_sec = sec
+			ui.update_time(sec)
 		sand_sfx_t -= dt
 		if mv > 25 and sand_sfx_t <= 0.0:
 			play("sand", 0.9 + randf() * 0.2, -14.0)
@@ -1465,15 +1530,17 @@ func _hero_target(t: float) -> Dictionary:
 	var st := hero_strain
 	match hero_pose:
 		"push":
-			var d := PUSH_POSE.duplicate()
-			var q := sin(t * (18.0 + st * 14.0)) * (0.015 + st * 0.035)
-			d.torso += q + st * 0.06
-			d.arm_up_f -= q * 1.5
-			d.arm_up_b -= q * 1.2
-			d.leg_up_b += st * 0.12
-			if look_t > 0.0:
-				d.head = 0.25
-				d.torso -= 0.12
+			var dz := hz_p
+			var heave := 0.5 + 0.5 * sin(push_ph)
+			var panic := clampf((dz - 0.7) / 0.3, 0.0, 1.0)
+			var shake_k := sin(t * 42.0) * 0.035 * clampf((dz - 0.4) * 2.5, 0.0, 1.0)
+			var d := {"torso": 0.2 + heave * 0.1 * (1.0 - panic) + dz * 0.05 + shake_k * 0.5,
+				"head": -0.18 + heave * 0.06,
+				"leg_up_f": -0.48, "leg_lo_f": 0.28 + shake_k,
+				"leg_up_b": 0.24 + heave * 0.08 * (1.0 - panic), "leg_lo_b": 0.05 - shake_k}
+			if look_t > 0.0 or flinch > 0.0:
+				d.torso -= 0.14
+				d.head = 0.32
 			return d
 		"scared":
 			var w := sin(t * 38.0) * 0.05
@@ -1495,6 +1562,8 @@ func _hero_target(t: float) -> Dictionary:
 	return {}
 
 func _hero_face() -> String:
+	if hero_pose == "push" and (flinch > 0.0 or (hz_p > 0.75 and look_t > 0.0)):
+		return "scared"
 	match hero_pose:
 		"scared":
 			return "scared"
@@ -1504,7 +1573,8 @@ func _hero_face() -> String:
 		return "look" if hz_p < 0.75 else "scared"
 	if blink_t < 0.12:
 		return "blink"
-	return "strain" if hero_strain > 0.25 or hz_p > 0.5 else "neutral"
+	var heave := 0.5 + 0.5 * sin(push_ph)
+	return "strain" if heave > 0.55 or hz_p > 0.45 else "neutral"
 
 func _chaser_target(kind: String, t: float, speed: float) -> Dictionary:
 	var ph := chaser_phase
@@ -1540,6 +1610,28 @@ func _chaser_target(kind: String, t: float, speed: float) -> Dictionary:
 			return d
 	return {}
 
+## Two-bone IK keeps both hands on the door; in panic Zaki pounds it with his fists.
+func _push_arms(dt: float, s: float) -> void:
+	var push_dx := facing * (0.5 + 0.5 * sin(push_ph)) * 0.25
+	var d_px := ((_door_face() - (hero_x + push_dx)) * facing) / (HERO_H / HERO_PX)
+	var panic := clampf((hz_p - 0.7) / 0.3, 0.0, 1.0)
+	var pound := sin(hero_t * 9.0)
+	var tf := Vector2(d_px - 45.0 - maxf(0.0, pound) * 110.0 * panic, -315.0 + sin(push_ph) * 8.0)
+	var tb := Vector2(d_px - 45.0 - maxf(0.0, -pound) * 110.0 * panic, -240.0 - sin(push_ph) * 6.0)
+	if look_t > 0.0 and panic < 0.5:
+		tb = Vector2(d_px - 60.0, -200.0)   # one hand slips as he looks back
+	var kk: float = 1.0 if hand_f == Vector2.ZERO else minf(1.0, dt * 18.0)
+	hand_f = hand_f.lerp(tf, kk)
+	hand_b = hand_b.lerp(tb, kk)
+	hero.ik_arm("f", hand_f)
+	hero.ik_arm("b", hand_b, true, 0.62)
+	# a knock each time a fist hits the door
+	if panic > 0.2 and signf(pound) != signf(pound_prev):
+		door_hit = 1.0
+		play("click", 0.55 + randf() * 0.1, -6.0)
+		buzz(10)
+	pound_prev = pound
+
 func _hazard_width() -> float:
 	var hz: String = L.get("hazard", "")
 	if hz == "spikes":
@@ -1569,16 +1661,29 @@ func _anim(dt: float) -> void:
 	if blink_t < 0.0:
 		blink_t = 2.0 + randf() * 2.5
 	look_t = maxf(0.0, look_t - dt)
+	flinch = maxf(0.0, flinch - dt)
+	door_hit = maxf(0.0, door_hit - dt * 4.0)
+	push_ph += dt * (2.4 + hz_p * 5.5)
 	if hero_pose == "push" and state != "won":
 		look_cd -= dt
-		if look_cd <= 0.0 and hz_p > 0.2:
-			look_t = 0.9
-			look_cd = lerpf(5.0, 1.6, hz_p) + randf()
+		if look_cd <= 0.0 and hz_p > 0.12:
+			look_t = lerpf(0.7, 1.3, hz_p)
+			look_cd = lerpf(5.5, 1.2, hz_p) + randf() * 1.5
 	var k: float = 1.0 if dt == 0.0 else minf(1.0, dt * 14.0)
 	hero.pose(_hero_target(hero_t), k)
 	hero.set_face(_hero_face())
 	var s := HERO_H * g / HERO_PX
 	hero.scale = Vector2(s * facing, s)
+	if hero_pose == "push":
+		_push_arms(dt, s)
+	# sweat when the danger is close
+	if hero_pose == "push" and hz_p > 0.35 and dt > 0.0:
+		sweat_t -= dt
+		if sweat_t <= 0.0:
+			sweat_t = lerpf(1.4, 0.35, hz_p) + randf() * 0.4
+			var hp: Vector2 = hero.bones["head"].to_global(Vector2(70, -250)) - global_position
+			parts.append({"x": hp.x, "y": hp.y, "vx": -facing * (20.0 + randf() * 40.0), "vy": -40.0, "life": 0.0, "max": 0.7,
+				"col": Color(0.7, 0.88, 1.0, 0.9), "size": g * 0.35, "grav": 600.0, "kind": "dot"})
 	var bob := 0.0
 	match hero_pose:
 		"push":
@@ -1589,7 +1694,10 @@ func _anim(dt: float) -> void:
 			bob = -absf(sin(hero_t * 13.0)) * 0.7
 		"scared":
 			bob = sin(hero_t * 40.0) * 0.15
-	hero.position = Vector2(wx(hero_x), wy(BY - 1.25 - hero_lift - bob) - hero.foot_drop() * s)
+	var push_dx := 0.0
+	if hero_pose == "push":
+		push_dx = facing * (0.5 + 0.5 * sin(push_ph)) * 0.25
+	hero.position = Vector2(wx(hero_x + push_dx), wy(BY - 1.25 - hero_lift - bob) - hero.foot_drop() * s)
 	hero.modulate.a = hero_alpha
 	# chaser (golem, mummy, cobra)
 	var hz: String = L.get("hazard", "")
@@ -1599,6 +1707,7 @@ func _anim(dt: float) -> void:
 		roar_t += dt
 		if roar_t > 4.5 + randf() * 3.0 and hz_p > 0.15:
 			roar_t = 0.0
+			flinch = 0.7
 			play("boom", 0.45 if hz == "golem" else 0.8, -12.0)
 		if state == "lost":
 			golem_attack = minf(1.0, golem_attack + dt * 1.2)
@@ -1652,68 +1761,111 @@ func _draw_water(ci: CanvasItem) -> void:
 	var x1 := wx(room.x1)
 	var room_h := float(room.y1 - room.y0)
 	var level: float = BY - (0.6 + hz_p * room_h * 0.72)
-	# inflow from a pipe high on the far wall
 	var sp := _spout_pos()
 	var px := sp.x
 	var py := sp.y + g * 1.2
+	var ly := wy(level)
+	# stream: a wide translucent body with bright streaks
 	if hz_p < 0.999 or state == "lost":
-		var wob := sin(time * 9.0) * g * 0.2
-		ci.draw_rect(Rect2(Vector2(px - g * 0.7 + wob, py), Vector2(g * 1.4, wy(level) - py)), Color(0.45, 0.75, 1.0, 0.55))
+		var wob := sin(time * 9.0) * g * 0.15
+		_vgrad(ci, Rect2(Vector2(px - g * 0.85 + wob, py), Vector2(g * 1.7, ly - py)), Color(0.55, 0.85, 1.0, 0.75), Color(0.35, 0.7, 1.0, 0.55))
+		for k in 3:
+			var sx := px + (k - 1) * g * 0.45 + sin(time * 13.0 + k * 2.0) * g * 0.1
+			var off := fmod(time * 260.0 + k * 90.0, maxf(1.0, ly - py))
+			ci.draw_line(Vector2(sx, py + off), Vector2(sx, minf(ly, py + off + g * 3.0)), Color(1, 1, 1, 0.55), maxf(1.0, g * 0.18))
+		# splash and foam where it lands
+		if randf() < 0.7:
+			var a := -PI / 2.0 + (randf() - 0.5) * 2.4
+			var v := (60.0 + randf() * 140.0) * g / 6.0
+			parts.append({"x": px + (randf() - 0.5) * g, "y": ly, "vx": cos(a) * v, "vy": sin(a) * v, "life": 0.0, "max": 0.45,
+				"col": Color(0.85, 0.95, 1.0, 0.9), "size": g * (0.2 + randf() * 0.25), "grav": 700.0 * g / 6.0, "kind": "dot"})
+		for k in 4:
+			var fr := g * (1.0 + 0.5 * sin(time * 6.0 + k * 1.7))
+			ci.draw_circle(Vector2(px + (k - 1.5) * g * 0.9, ly), fr, Color(0.92, 0.98, 1.0, 0.55))
+	# body: deep blue gradient with a lighter surface band
 	var pts := PackedVector2Array()
 	var cols := PackedColorArray()
-	var n := 24
+	var n := 28
 	for i in n + 1:
 		var x := lerpf(x0, x1, float(i) / n)
 		var wv := sin(time * 3.0 + i * 0.8) * g * 0.35 + sin(time * 5.3 + i * 1.7) * g * 0.15
-		pts.append(Vector2(x, wy(level) + wv))
-		cols.append(Color(0.45, 0.78, 1.0, 0.6))
+		pts.append(Vector2(x, ly + wv))
+		cols.append(Color(0.5, 0.82, 1.0, 0.62))
 	pts.append(Vector2(x1, wy(BY)))
-	cols.append(Color(0.08, 0.28, 0.6, 0.85))
+	cols.append(Color(0.04, 0.2, 0.5, 0.88))
 	pts.append(Vector2(x0, wy(BY)))
-	cols.append(Color(0.08, 0.28, 0.6, 0.85))
+	cols.append(Color(0.04, 0.2, 0.5, 0.88))
 	ci.draw_polygon(pts, cols)
+	# caustic light lines under the surface
+	for k in 6:
+		var cy := ly + g * (1.5 + k * 1.6)
+		if cy > wy(BY) - g:
+			break
+		var line := PackedVector2Array()
+		for i in 13:
+			var x := lerpf(x0, x1, float(i) / 12.0)
+			line.append(Vector2(x, cy + sin(time * 2.0 + i * 1.3 + k) * g * 0.4))
+		ci.draw_polyline(line, Color(0.75, 0.95, 1.0, 0.12), maxf(1.0, g * 0.25), true)
 	var top := PackedVector2Array()
 	for i in n + 1:
 		top.append(pts[i])
-	ci.draw_polyline(top, Color(0.85, 0.95, 1.0, 0.8), maxf(1.5, g * 0.35), true)
-	for k in 8:
+	ci.draw_polyline(top, Color(0.92, 0.98, 1.0, 0.9), maxf(1.5, g * 0.35), true)
+	for k in 10:
 		var bx := lerpf(x0, x1, fmod(k * 0.137 + 0.05, 1.0))
 		var by := wy(BY) - fmod(time * 30.0 + k * 41.0, maxf(1.0, (BY - level) * g))
-		ci.draw_arc(Vector2(bx + sin(time * 4.0 + k) * g * 0.3, by), g * 0.25, 0, TAU, 10, Color(0.9, 0.97, 1.0, 0.6), 1.5)
+		ci.draw_arc(Vector2(bx + sin(time * 4.0 + k) * g * 0.3, by), g * 0.22, 0, TAU, 10, Color(0.9, 0.97, 1.0, 0.6), 1.5)
 
 func _draw_lava(ci: CanvasItem) -> void:
 	var far = room.x0 if facing > 0 else room.x1
 	var front := _hazard_front()
-	var h := 2.2 + hz_p * 2.6
-	# lava pouring from the far wall
+	var h := 2.2 + hz_p * 2.8
 	var sp := _spout_pos()
 	var px := sp.x
 	var py := sp.y + g * 1.2
 	if hz_p > 0.0:
-		var wob := sin(time * 7.0) * g * 0.2
-		_vgrad(ci, Rect2(Vector2(px - g * 0.75 + wob, py), Vector2(g * 1.5, wy(BY - h) - py + g)), Color(1.0, 0.85, 0.3), Color(1.0, 0.45, 0.08))
+		var wob := sin(time * 7.0) * g * 0.15
+		var ly := wy(BY - h)
+		_vgrad(ci, Rect2(Vector2(px - g * 0.85 + wob, py), Vector2(g * 1.7, ly - py + g)), Color(1.0, 0.92, 0.45), Color(1.0, 0.42, 0.05))
+		ci.draw_line(Vector2(px + wob, py), Vector2(px + wob, ly), Color(1.0, 1.0, 0.8, 0.8), maxf(1.0, g * 0.3))
+		if randf() < 0.35:
+			parts.append({"x": px + (randf() - 0.5) * g, "y": ly, "vx": (randf() - 0.5) * 120.0 * g / 6.0, "vy": -(80.0 + randf() * 120.0) * g / 6.0,
+				"life": 0.0, "max": 0.6, "col": Color(1.0, 0.7 + randf() * 0.25, 0.2), "size": g * (0.25 + randf() * 0.3), "grav": 600.0 * g / 6.0, "kind": "dot"})
 	if hz_p <= 0.001:
 		return
 	var pts := PackedVector2Array()
 	var cols := PackedColorArray()
-	var n := 20
+	var n := 24
+	var surf := []
 	for i in n + 1:
 		var t := float(i) / n
 		var x := lerpf(far, front, t)
 		var bump := sin(time * 2.0 + i * 1.3) * 0.35 + sin(time * 3.1 + i * 0.7) * 0.2
 		var hh := h * (1.0 - pow(t, 6.0)) + bump
-		pts.append(Vector2(wx(x), wy(BY - maxf(0.3, hh))))
-		cols.append(Color(1.0, 0.82, 0.3))
+		var pt := Vector2(wx(x), wy(BY - maxf(0.3, hh)))
+		pts.append(pt)
+		surf.append(pt)
+		cols.append(Color(1.0, 0.88, 0.35))
 	pts.append(Vector2(wx(front), wy(BY)))
-	cols.append(Color(0.85, 0.22, 0.04))
+	cols.append(Color(0.7, 0.12, 0.02))
 	pts.append(Vector2(wx(far), wy(BY)))
-	cols.append(Color(0.85, 0.22, 0.04))
+	cols.append(Color(0.7, 0.12, 0.02))
 	ci.draw_polygon(pts, cols)
-	# cooling crust
-	for k in 7:
-		var t := fmod(k * 0.17 + time * 0.03, 0.9)
+	# dark cooling crust plates drifting with the flow, bright cracks between
+	for k in 9:
+		var t := fmod(k * 0.113 + time * 0.035, 0.92)
 		var x := lerpf(far, front, t)
-		ci.draw_circle(Vector2(wx(x), wy(BY - h * 0.45 + sin(time + k) * 0.3)), g * (0.6 + 0.3 * sin(time * 1.3 + k)), Color(0.45, 0.1, 0.04, 0.55))
+		var cy := wy(BY - h * 0.5 + sin(time + k) * 0.3)
+		var rr := g * (0.7 + 0.3 * sin(time * 1.3 + k))
+		ci.draw_circle(Vector2(wx(x), cy), rr, Color(0.32, 0.07, 0.03, 0.7))
+		ci.draw_arc(Vector2(wx(x), cy), rr, 0, TAU, 14, Color(1.0, 0.75, 0.25, 0.6), maxf(1.0, g * 0.15))
+	# bubbles that swell and pop on the surface
+	for k in 5:
+		var ph := fmod(time * 0.8 + k * 0.37, 1.0)
+		var i := (k * 5 + 2) % (n - 2) + 1
+		var b: Vector2 = surf[i]
+		ci.draw_circle(b, g * 0.7 * ph, Color(1.0, 0.95, 0.6, 0.8 * (1.0 - ph)))
+	var top := PackedVector2Array(surf)
+	ci.draw_polyline(top, Color(1.0, 0.98, 0.75, 0.9), maxf(1.5, g * 0.3), true)
 
 # ---------- drawing ----------
 func _draw_tex_centered(ci: CanvasItem, t: Texture2D, center: Vector2, size: Vector2, rot := 0.0, mod := Color.WHITE) -> void:
@@ -1769,6 +1921,8 @@ func _draw_bg(ci: CanvasItem) -> void:
 func _draw_back(ci: CanvasItem) -> void:
 	if L.is_empty():
 		return
+	_draw_open_door(ci)
+	_draw_safe_door(ci)
 	# water / lava spout on the far wall of the room
 	var hz: String = L.get("hazard", "")
 	if hz == "water" or hz == "lava":
@@ -1807,20 +1961,39 @@ func _draw_frame(ci: CanvasItem) -> void:
 	_draw_door(ci)
 
 func _draw_door(ci: CanvasItem) -> void:
+	if door_swing > 0.0:
+		return   # drawn behind Zaki in the back layer once it opens
 	var x = wx(door_col + 0.5)
 	var top = wy(room.y0) + g * 0.8
 	var bot = wy(BY) - g * 0.2
 	var h = bot - top
-	if door_open:
-		var side = facing if state == "won" else -facing
-		ci.draw_set_transform(Vector2(x + side * g * 5.0, bot - g * 0.8), PI / 2.0 + side * 0.12, Vector2.ONE)
-		ci.draw_texture_rect(tex.door, Rect2(Vector2(-g * 1.5, -h / 2.0), Vector2(g * 3.0, h)), false, Color(0.85, 0.85, 0.85))
-		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var heave: float = 0.5 + 0.5 * sin(push_ph) if hero_pose == "push" else 0.0
+	var free := 1.0 - float(shaft_sand) / float(shaft0)
+	var jit := facing * (heave * 0.12 + door_hit * 0.25) * g * (0.4 + free)
+	var w := DOOR_EDGE_W * g
+	ci.draw_texture_rect(tex.door_edge, Rect2(Vector2(x - w / 2.0 + jit, top), Vector2(w, h)), false)
+
+func _draw_open_door(ci: CanvasItem) -> void:
+	if door_swing <= 0.0:
 		return
-	var bulge = -facing * hero_strain * g * 0.6 + sin(hero_t * 30.0) * hero_strain * g * 0.12
-	ci.draw_set_transform(Vector2(x + bulge, (top + bot) / 2.0), -facing * hero_strain * 0.03, Vector2.ONE)
-	ci.draw_texture_rect(tex.door, Rect2(Vector2(-g * 1.5, -h / 2.0), Vector2(g * 3.0, h)), false)
-	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var top = wy(room.y0) + g * 0.8
+	var bot = wy(BY) - g * 0.2
+	var h = bot - top
+	var hinge := wx(door_col + 0.5) + facing * DOOR_EDGE_W * g / 2.0
+	var face_w: float = minf(h * tex.door.get_width() / tex.door.get_height(), (shaft.x1 - shaft.x0) * g * 0.55)
+	var w: float = lerpf(DOOR_EDGE_W * g, face_w, sin(door_swing * PI / 2.0))
+	var shade := lerpf(0.75, 1.0, door_swing)
+	var r := Rect2(Vector2(hinge if facing > 0 else hinge - w, top), Vector2(w, h))
+	ci.draw_texture_rect(tex.door, r, false, Color(shade, shade, shade))
+	# the dark doorway left behind
+	ci.draw_rect(Rect2(Vector2(wx(door_col + 0.5) - DOOR_EDGE_W * g / 2.0, top), Vector2(DOOR_EDGE_W * g, h)), Color(0.05, 0.03, 0.02, 0.0))
+
+func _draw_safe_door(ci: CanvasItem) -> void:
+	var t: Texture2D = tex.door_full
+	var hh := SAFE_H * g
+	var ww: float = hh * t.get_width() / t.get_height()
+	var r := Rect2(Vector2(wx(safe_x) - ww / 2.0, wy(BY - 1.0) - hh), Vector2(ww, hh))
+	ci.draw_texture_rect(t, r, false)
 
 func _gem_tex(m: Gem) -> Texture2D:
 	match m.kind:
@@ -1936,6 +2109,16 @@ func _draw_add(ci: CanvasItem) -> void:
 		var mid := wx((far + _hazard_front()) / 2.0)
 		var wdt := absf(_hazard_front() - far) * g
 		_draw_tex_centered(ci, glow_tex, Vector2(mid, wy(BY - 2.0)), Vector2(wdt * 1.6 + g * 8.0, g * 14.0), 0.0, Color(1.0, 0.45, 0.1, 0.55))
+	if not shaft.is_empty():
+		var free := 1.0 - float(shaft_sand) / float(shaft0)
+		var leak := clampf((free - 0.55) / 0.45, 0.0, 1.0)
+		if leak > 0.0 and door_swing <= 0.0:
+			var dx := wx(door_col + 0.5) + facing * DOOR_EDGE_W * g * 0.5
+			var flick := 0.85 + 0.15 * sin(time * 7.0)
+			_draw_tex_centered(ci, glow_tex, Vector2(dx, wy(BY - 9.0)), Vector2(g * 5.0, g * 26.0), 0.0, Color(1.0, 0.85, 0.5, 0.45 * leak * flick))
+		var sg := maxf(safe_glow, clampf((free - 0.6) / 0.4, 0.0, 1.0) * 0.4)
+		if sg > 0.0:
+			_draw_tex_centered(ci, glow_tex, Vector2(wx(safe_x), wy(BY - SAFE_H * 0.45)), Vector2(g * 16.0, g * 18.0), 0.0, Color(1.0, 0.8, 0.4, 0.5 * sg))
 	for f in fx:
 		if f.kind == "flash":
 			var p: float = f.life / f.max

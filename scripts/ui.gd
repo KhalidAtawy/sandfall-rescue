@@ -19,6 +19,7 @@ var hud: Control
 var menu_btn: Button
 var lvl_label: Label
 var name_label: Label
+var time_label: Label
 var moves_panel: PanelContainer
 var moves_label: Label
 var ring: Ring
@@ -147,6 +148,8 @@ func build() -> void:
 	name_label.clip_text = true
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	hud.add_child(name_label)
+	time_label = _label("1:50", font_display, 30, INK)
+	hud.add_child(time_label)
 	moves_panel = PanelContainer.new()
 	moves_panel.add_theme_stylebox_override("panel", _box(PANEL_2, GOLD_DEEP, 22, 4))
 	moves_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -211,7 +214,8 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	menu_btn.position = Vector2(pad, top + 12)
 	menu_btn.size = Vector2(78, 78)
 	lvl_label.position = Vector2(pad + 96, top + 6)
-	name_label.position = Vector2(pad + 98, top + 54)
+	name_label.position = Vector2(pad + 98, top + 50)
+	time_label.position = Vector2(pad + 98, top + 82)
 	var right = vs.x - pad
 	pct_label.position = Vector2(right - 88, top + 26)
 	ring.position = Vector2(right - 88 - 82, top + 12)
@@ -231,6 +235,10 @@ func set_level(n: int, title: String, col: Color) -> void:
 	name_label.text = title
 	ring.col = col
 	ring.queue_redraw()
+
+func update_time(sec: int) -> void:
+	time_label.text = "Time %d:%02d" % [sec / 60, sec % 60]
+	time_label.add_theme_color_override("font_color", Color("ff8f6b") if sec <= 15 else INK)
 
 func update_hud(moves: int, pct: int) -> void:
 	moves_label.text = str(maxi(0, moves))
@@ -357,16 +365,16 @@ func show_win(stars: int, moves: int, title: String, has_next: bool) -> void:
 	card_box.add_child(lb)
 	_show_card()
 
-func show_lose(left: int, can_extra: bool) -> void:
+func show_lose(left: int, can_extra: bool, title := "Zaki got caught!") -> void:
 	_clear_card()
-	var t = _label("The door gave way!", font_display, 62, GOLD)
+	var t = _label(title, font_display, 62, GOLD)
 	_heading(t)
 	card_box.add_child(t)
-	var d = _label("%d%% of the debris was still left." % left, font_body, 30, INK_SOFT)
+	var d = _label("%d%% of the sand was still blocking the door." % left, font_body, 30, INK_SOFT)
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card_box.add_child(d)
 	if can_extra:
-		var mb = _button("+5 moves", "gold")
+		var mb = _button("+5 moves, +25 s", "gold")
 		mb.pressed.connect(func():
 			game.play("click")
 			game.plus_five())

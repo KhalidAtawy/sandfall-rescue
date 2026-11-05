@@ -83,3 +83,37 @@ func _bone(n: String) -> Dictionary:
 		if b.name == n:
 			return b
 	return {}
+
+## Two-bone IK: bend the arm so the hand lands on `target` (rig pixels, +x toward the door).
+## The elbow takes the lower of the two solutions, the natural bend when pushing.
+func ik_arm(side: String, target: Vector2, elbow_back := false, min_frac := 0.0) -> void:
+	var up := "arm_up_" + side
+	var lo := "arm_lo_" + side
+	var b: Dictionary = _bone(up)
+	var ta: float = angles["torso"]
+	var sh := Vector2(b.pos[0], b.pos[1]).rotated(ta)
+	var a: float = lens[up]
+	var c: float = lens[lo]
+	var v := target - sh
+	var min_d := min_frac * (a + c)
+	if min_frac > 0.0 and v.length() < min_d and absf(v.x) < min_d:
+		# too close to reach comfortably: slide the hand down the door
+		v = Vector2(v.x, sqrt(min_d * min_d - v.x * v.x))
+	var d := clampf(v.length(), absf(a - c) + 1.0, a + c - 1.0)
+	var base := v.angle()
+	var ca := clampf((a * a + d * d - c * c) / (2.0 * a * d), -1.0, 1.0)
+	var ang := acos(ca)
+	var e1 := sh + Vector2.from_angle(base + ang) * a
+	var e2 := sh + Vector2.from_angle(base - ang) * a
+	var e: Vector2 = e1 if e1.y > e2.y else e2
+	if elbow_back:
+		e = e1 if e1.x < e2.x else e2
+	var tip := sh + v.normalized() * d
+	var du := e - sh
+	var df := tip - e
+	var tu := atan2(-du.x, du.y)
+	var tf := atan2(-df.x, df.y)
+	angles[up] = tu - ta
+	angles[lo] = tf - tu
+	bones[up].rotation = angles[up]
+	bones[lo].rotation = angles[lo]
