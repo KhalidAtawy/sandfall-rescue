@@ -8,6 +8,7 @@ const Ui := preload("res://scripts/ui.gd")
 const Rig := preload("res://scripts/rig.gd")
 const RigData := preload("res://scripts/rig_data.gd")
 const Puppet := preload("res://scripts/puppet.gd")
+const FramesData := preload("res://scripts/frames_data.gd")
 const HERO_H := 15.0      # hero height in world cells
 const HERO_PX := 1126.0   # hero height in rig pixels
 const ROOM_H := 24
@@ -128,7 +129,11 @@ const SAVE_PATH := "user://progress.cfg"
 # ---------- nodes ----------
 var bg_layer: Node2D
 var back_layer: Node2D
-var hero: Rig
+var hero: Sprite2D
+var frame_tex := {}
+var anim_t := 0.0
+var jit_t := 0.0
+var jit_i := 0
 var chasers := {}
 var hz_layer: Node2D
 var hz_p := 0.0
@@ -193,8 +198,13 @@ func _ready() -> void:
 		pp.z_index = 3
 		add_child(pp)
 		chasers[kname] = pp
-	hero = Rig.new()
-	hero.setup(RigData.HERO)
+	for key in FramesData.FRAMES:
+		var arr := []
+		for f in FramesData.FRAMES[key]:
+			arr.append(load(f.tex))
+		frame_tex[key] = arr
+	hero = Sprite2D.new()
+	hero.centered = false
 	add_child(hero)
 	hz_layer = _layer(_draw_hazard)
 	sand_sprite = Sprite2D.new()
@@ -213,6 +223,8 @@ func _ready() -> void:
 	add_layer.material = am
 	# explicit draw order (rig parts add their own small z offsets)
 	bg_layer.z_index = 0
+	bg_layer.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
+	frame_layer.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	back_layer.z_index = 1
 	hero.z_index = 10
 	hz_layer.z_index = 16
@@ -249,7 +261,12 @@ func _load_textures() -> void:
 		tex["grains_" + n] = load("res://assets/gfx/board/grains_%s.png" % n)
 	for n in ["sand", "water", "crystal", "lava"]:
 		tex["room_" + n] = load("res://assets/gfx/rooms/room_%s.jpg" % n)
-	for n in ["door", "door_edge", "door_full", "spikewall", "spout_lion", "spout_ram"]:
+	for n in ["door_edge", "door_full", "spikewall", "spout_lion", "spout_ram"]:
+		tex[n] = load("res://assets/gfx/props/%s.png" % n)
+	tex.pillar = load("res://assets/gfx/stone/pillar.png")
+	tex.frieze = load("res://assets/gfx/stone/frieze.png")
+	tex.stonewall = load("res://assets/gfx/stone/wall.jpg")
+	for n in []:
 		tex[n] = load("res://assets/gfx/props/%s.png" % n)
 	tex.gems = [tex.gem_red, tex.gem_blue, tex.gem_gold, tex.gem_green]
 	var gt := GradientTexture2D.new()
@@ -1220,7 +1237,7 @@ func _escape() -> void:
 	tween(self, {"hero_x": safe_x}, dur, "lin")
 	tween(self, {"safe_glow": 1.0}, dur, "lin")
 	await wait(dur)
-	hero_pose = "cheer"
+	hero_pose = "wave"
 	play("shine", 1.2, -4.0)
 	await wait(0.35)
 	tween(self, {"hero_alpha": 0.0}, 0.45, "lin")
@@ -1631,27 +1648,89 @@ func _chaser_target(kind: String, t: float, speed: float) -> Dictionary:
 			return d
 	return {}
 
-## Two-bone IK keeps both hands on the door; in panic Zaki pounds it with his fists.
-func _push_arms(dt: float, s: float) -> void:
-	var push_dx := facing * (0.5 + 0.5 * sin(push_ph)) * 0.25
-	var d_px := ((_door_face() - (hero_x + push_dx)) * facing) / (HERO_H / HERO_PX)
-	var panic := clampf((hz_p - 0.7) / 0.3, 0.0, 1.0)
-	var pound := sin(hero_t * 9.0)
-	var tf := Vector2(d_px - 45.0 - maxf(0.0, pound) * 110.0 * panic, -315.0 + sin(push_ph) * 8.0)
-	var tb := Vector2(d_px - 45.0 - maxf(0.0, -pound) * 110.0 * panic, -240.0 - sin(push_ph) * 6.0)
-	if look_t > 0.0 and panic < 0.5:
-		tb = Vector2(d_px - 60.0, -200.0)   # one hand slips as he looks back
-	var kk: float = 1.0 if hand_f == Vector2.ZERO else minf(1.0, dt * 18.0)
-	hand_f = hand_f.lerp(tf, kk)
-	hand_b = hand_b.lerp(tb, kk)
-	hero.ik_arm("f", hand_f)
-	hero.ik_arm("b", hand_b, true, 0.62)
-	# a knock each time a fist hits the door
-	if panic > 0.2 and signf(pound) != signf(pound_prev):
-		door_hit = 1.0
-		play("click", 0.55 + randf() * 0.1, -6.0)
-		buzz(10)
-	pound_prev = pound
+## Picks Zaki's animation frame from the AI sprite sheets and stands him on the floor.
+## Pushing frames are placed by their palms on the door face, so the hands never pass through it.
+func _hero_frames(dt: float) -> void:
+	var key := "push"
+	var idx := 0
+	var fps := 7.0 + hz_p * 7.0
+	anim_t += dt * fps
+	jit_t -= dt
+	if jit_t <= 0.0:
+		jit_t = 0.09
+		jit_i = randi() % 3 - 1
+	var by_hand := false
+	match hero_pose:
+		"push":
+			by_hand = true
+			if flinch > 0.0:
+				key = "panic"
+				idx = 5
+			elif hz_p < 0.35:
+				key = "push"
+				idx = int(anim_t) % 6
+			elif hz_p < 0.7:
+				key = "fright"
+				idx = int(anim_t * 0.8) % 6
+			else:
+				var esc := clampi(int((hz_p - 0.7) / 0.3 * 5.0 + 0.5), 0, 5)
+				if sin(hero_t * 0.9) > 0.35:
+					key = "pound"
+					idx = int(anim_t * 0.9) % 4
+					by_hand = false
+				else:
+					key = "panic"
+					idx = clampi(esc + jit_i, 0, 5)
+		"run":
+			key = "run"
+			idx = int(hero_t * 12.0) % 6
+		"scared":
+			key = "poses"
+			idx = 0
+		"cheer":
+			key = "poses"
+			idx = 1
+		"wave":
+			key = "poses"
+			idx = 2
+	var f: Dictionary = FramesData.FRAMES[key][idx]
+	hero.texture = frame_tex[key][idx]
+	var s: float = HERO_H * g / FramesData.FIG_H
+	hero.scale = Vector2(s, s)
+	hero.flip_h = facing < 0
+	var w: float = f.w
+	var floor_y := wy(BY - 1.25 - hero_lift)
+	var ax: float
+	var world_x: float
+	if by_hand:
+		ax = f.hand
+		world_x = wx(_door_face()) + facing * 2.0
+	elif hero_pose == "push":
+		# pounding: keep the body where the pushing frames put it
+		var p0: Dictionary = FramesData.FRAMES["push"][0]
+		ax = f.foot[0]
+		world_x = wx(_door_face()) - facing * (p0.hand - p0.foot[0]) * s
+	else:
+		ax = f.foot[0]
+		world_x = wx(hero_x)
+	var axm: float = ax if facing > 0 else w - ax
+	var shake_px := 0.0
+	if hero_pose == "push" and hz_p > 0.55:
+		shake_px = sin(hero_t * 47.0) * g * 0.08 * hz_p
+	hero.position = Vector2(world_x - axm * s + shake_px, floor_y - float(f.h) * s)
+	if hero_pose == "push":
+		# remember where his feet are, so running starts from the right spot
+		var fx: float = f.foot[0] if facing > 0 else w - f.foot[0]
+		hero_x = (hero.position.x + fx * s - ox) / g
+	# sweat when the danger is close
+	if hero_pose == "push" and hz_p > 0.35 and dt > 0.0:
+		sweat_t -= dt
+		if sweat_t <= 0.0:
+			sweat_t = lerpf(1.4, 0.35, hz_p) + randf() * 0.4
+			var hx: float = (0.72 if facing > 0 else 0.28) * w * s
+			var hp := hero.position + Vector2(hx, float(f.h) * 0.2 * s)
+			parts.append({"x": hp.x, "y": hp.y, "vx": -facing * (20.0 + randf() * 40.0), "vy": -40.0, "life": 0.0, "max": 0.7,
+				"col": Color(0.7, 0.88, 1.0, 0.9), "size": g * 0.35, "grav": 600.0, "kind": "dot"})
 
 func _hazard_width() -> float:
 	var hz: String = L.get("hazard", "")
@@ -1685,40 +1764,20 @@ func _anim(dt: float) -> void:
 	flinch = maxf(0.0, flinch - dt)
 	door_hit = maxf(0.0, door_hit - dt * 4.0)
 	push_ph += dt * (2.4 + hz_p * 5.5)
+	var pound_now := sin(hero_t * 0.9) > 0.35 and hz_p >= 0.7 and hero_pose == "push"
+	if pound_now:
+		var ph := int(anim_t * 0.9) % 4
+		if ph % 2 == 1 and pound_prev < 0.5:
+			door_hit = 1.0
+			play("click", 0.55 + randf() * 0.1, -6.0)
+			buzz(10)
+		pound_prev = 1.0 if ph % 2 == 1 else 0.0
 	if hero_pose == "push" and state != "won":
 		look_cd -= dt
 		if look_cd <= 0.0 and hz_p > 0.12:
 			look_t = lerpf(0.7, 1.3, hz_p)
 			look_cd = lerpf(5.5, 1.2, hz_p) + randf() * 1.5
-	var k: float = 1.0 if dt == 0.0 else minf(1.0, dt * 14.0)
-	hero.pose(_hero_target(hero_t), k)
-	hero.set_face(_hero_face())
-	var s := HERO_H * g / HERO_PX
-	hero.scale = Vector2(s * facing, s)
-	if hero_pose == "push":
-		_push_arms(dt, s)
-	# sweat when the danger is close
-	if hero_pose == "push" and hz_p > 0.35 and dt > 0.0:
-		sweat_t -= dt
-		if sweat_t <= 0.0:
-			sweat_t = lerpf(1.4, 0.35, hz_p) + randf() * 0.4
-			var hp: Vector2 = hero.bones["head"].to_global(Vector2(70, -250)) - global_position
-			parts.append({"x": hp.x, "y": hp.y, "vx": -facing * (20.0 + randf() * 40.0), "vy": -40.0, "life": 0.0, "max": 0.7,
-				"col": Color(0.7, 0.88, 1.0, 0.9), "size": g * 0.35, "grav": 600.0, "kind": "dot"})
-	var bob := 0.0
-	match hero_pose:
-		"push":
-			bob = sin(hero_t * 26.0) * 0.12 * (0.3 + hero_strain)
-		"cheer":
-			bob = -absf(sin(hero_t * 7.0)) * 2.2
-		"run":
-			bob = -absf(sin(hero_t * 13.0)) * 0.7
-		"scared":
-			bob = sin(hero_t * 40.0) * 0.15
-	var push_dx := 0.0
-	if hero_pose == "push":
-		push_dx = facing * (0.5 + 0.5 * sin(push_ph)) * 0.25
-	hero.position = Vector2(wx(hero_x + push_dx), wy(BY - 1.25 - hero_lift - bob) - hero.foot_drop() * s)
+	_hero_frames(dt)
 	hero.modulate.a = hero_alpha
 	# chaser (golem, mummy, cobra)
 	var hz: String = L.get("hazard", "")
@@ -1917,9 +1976,13 @@ func _draw_bg(ci: CanvasItem) -> void:
 	_vgrad(ci, Rect2(ox, oy, W, BY * g * 0.45), Color(0, 0, 0, 0.5), Color(0, 0, 0, 0))
 	var rr = Rect2(wx(room.x0), wy(room.y0), (room.x1 - room.x0) * g, (room.y1 - room.y0) * g)
 	_vgrad(ci, Rect2(rr.position, Vector2(rr.size.x, g * 3.0)), Color(0, 0, 0, 0.4), Color(0, 0, 0, 0))
-	# shaft recess
-	var sr = Rect2(wx(shaft.x0), wy(shaft.y0), (shaft.x1 - shaft.x0) * g, (BY - shaft.y0) * g)
-	_vgrad(ci, sr, theme.recess[1], theme.recess[0])
+	# shaft recess: the tomb wall texture deep in shadow
+	var sr0 = Rect2(wx(shaft.x0), wy(shaft.y0), (shaft.x1 - shaft.x0) * g, (BY - shaft.y0) * g)
+	var kw: float = (14.0 * g) / float(tex.stonewall.get_width())
+	ci.draw_set_transform(sr0.position, 0.0, Vector2(kw, kw))
+	ci.draw_texture_rect(tex.stonewall, Rect2(Vector2.ZERO, sr0.size / kw), true, Color(0.42, 0.36, 0.32))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_vgrad(ci, sr0, Color(0, 0, 0, 0.55), Color(0, 0, 0, 0.15))
 	# board backing
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color("101736")
@@ -1952,33 +2015,39 @@ func _draw_back(ci: CanvasItem) -> void:
 		var sp := _spout_pos()
 		ci.draw_texture_rect(t, Rect2(sp - Vector2(sz.x / 2.0, sz.y * 0.55), sz), false)
 
+func _tile_v(ci: CanvasItem, t: Texture2D, x: float, y0: float, y1: float, w: float) -> void:
+	# a vertical strip of a texture that repeats along its length
+	var k := w / float(t.get_width())
+	ci.draw_set_transform(Vector2(x - w / 2.0, y0), 0.0, Vector2(k, k))
+	ci.draw_texture_rect(t, Rect2(Vector2.ZERO, Vector2(t.get_width(), (y1 - y0) / k)), true)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _tile_h(ci: CanvasItem, t: Texture2D, x0: float, x1: float, y: float, h: float) -> void:
+	var k := h / float(t.get_height())
+	ci.draw_set_transform(Vector2(x0, y - h / 2.0), 0.0, Vector2(k, k))
+	ci.draw_texture_rect(t, Rect2(Vector2.ZERO, Vector2((x1 - x0) / k, t.get_height())), true)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 func _draw_frame(ci: CanvasItem) -> void:
 	if L.is_empty():
 		return
-	var gb: Texture2D = tex.goldbar
-	var t = g * 1.4
+	var t = g * 1.5
 	var sx0 = wx(shaft.x0)
 	var sx1 = wx(shaft.x1)
 	var sy = wy(shaft.y0)
 	var by = wy(BY)
-	# shaft sides (vertical bars drawn rotated)
-	for x in [sx0 - t * 0.5, sx1 + t * 0.5]:
-		ci.draw_set_transform(Vector2(x, (sy + by) / 2.0), PI / 2.0, Vector2.ONE)
-		ci.draw_texture_rect(gb, Rect2(Vector2(-(by - sy) / 2.0 - t / 2, -t / 2), Vector2(by - sy + t, t)), false)
-	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	ci.draw_texture_rect(gb, Rect2(Vector2(sx0 - t, sy - t * 0.9), Vector2(sx1 - sx0 + t * 2, t)), false)
-	# room: top bar and far wall
 	var rx0 = wx(room.x0)
 	var rx1 = wx(room.x1)
 	var ry = wy(room.y0)
-	ci.draw_texture_rect(gb, Rect2(Vector2(rx0 - t * 0.3, ry - t * 0.5), Vector2(rx1 - rx0 + t * 0.6, t * 0.8)), false)
 	var far = rx0 if facing > 0 else rx1
-	ci.draw_set_transform(Vector2(far, (ry + by) / 2.0), PI / 2.0, Vector2.ONE)
-	ci.draw_texture_rect(gb, Rect2(Vector2(-(by - ry) / 2.0, -t * 0.4), Vector2(by - ry, t * 0.8)), false)
-	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	# floor ledge over the board
-	ci.draw_texture_rect(gb, Rect2(Vector2(wx(BX - 0.8), wy(BY - 1.4)), Vector2((COLS * CELL + 1.6) * g, g * 1.3)), false)
-	# door
+	# pillars: both sides of the shaft and the room's far wall
+	_tile_v(ci, tex.pillar, sx0 - t * 0.5, sy - t * 0.5, by, t)
+	_tile_v(ci, tex.pillar, sx1 + t * 0.5, sy - t * 0.5, by, t)
+	_tile_v(ci, tex.pillar, far, ry, by, t * 0.9)
+	# carved beams: over the shaft, over the room, and the floor ledge above the board
+	_tile_h(ci, tex.frieze, sx0 - t, sx1 + t, sy - t * 0.45, t * 1.1)
+	_tile_h(ci, tex.frieze, minf(rx0, rx1) - t * 0.4, maxf(rx0, rx1) + t * 0.4, ry - t * 0.2, t)
+	_tile_h(ci, tex.frieze, wx(BX - 0.8), wx(BX + COLS * CELL + 0.8), wy(BY - 0.75), g * 1.5)
 	_draw_door(ci)
 
 func _draw_door(ci: CanvasItem) -> void:
