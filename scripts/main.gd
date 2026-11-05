@@ -13,7 +13,7 @@ const HERO_PX := 1126.0   # hero height in rig pixels
 const ROOM_H := 24
 const SPIKE_W := 6.0
 const DOOR_EDGE_W := 2.6   # side view of the door, in cells
-const SAFE_H := 12.0       # safe exit door height, in cells
+const SAFE_H := 17.0       # safe exit door height, in cells
 const RUBBLE_HIT := 20     # grains removed from a debris block per hit
 const CHASER_H := {"golem": 20.0, "mummy": 19.0, "cobra": 17.0}
 
@@ -1209,7 +1209,7 @@ func _escape() -> void:
 	await wait(0.3)
 	play("crack", 1.3, -6.0)
 	burst(wx(door_col + 0.5), wy(BY - 3), Color("c9a46a"), 12, 0.8)
-	tween(self, {"door_swing": 1.0}, 0.55, "out")
+	tween(self, {"door_swing": 1.0}, 0.8, "in")
 	buzz(30)
 	await wait(0.35)
 	hero_pose = "cheer"
@@ -1982,8 +1982,6 @@ func _draw_frame(ci: CanvasItem) -> void:
 	_draw_door(ci)
 
 func _draw_door(ci: CanvasItem) -> void:
-	if door_swing > 0.0:
-		return   # drawn behind Zaki in the back layer once it opens
 	var x = wx(door_col + 0.5)
 	var top = wy(room.y0) + g * 0.8
 	var bot = wy(BY) - g * 0.2
@@ -1992,9 +1990,17 @@ func _draw_door(ci: CanvasItem) -> void:
 	var free := 1.0 - float(shaft_sand) / float(shaft0)
 	var jit := facing * (heave * 0.12 + door_hit * 0.25) * g * (0.4 + free)
 	var w := DOOR_EDGE_W * g
-	ci.draw_texture_rect(tex.door_edge, Rect2(Vector2(x - w / 2.0 + jit, top), Vector2(w, h)), false)
+	# opening: the door slides up into the ceiling, so only its lower part stays visible
+	var lift: float = clampf(door_swing, 0.0, 1.0) * 0.97
+	var t: Texture2D = tex.door_edge
+	var th: float = t.get_height()
+	if lift >= 0.97:
+		return
+	ci.draw_texture_rect_region(t, Rect2(Vector2(x - w / 2.0 + jit, top), Vector2(w, h * (1.0 - lift))),
+		Rect2(0, th * lift, t.get_width(), th * (1.0 - lift)))
 
 func _draw_open_door(ci: CanvasItem) -> void:
+	return
 	if door_swing <= 0.0:
 		return
 	var top = wy(room.y0) + g * 0.8
