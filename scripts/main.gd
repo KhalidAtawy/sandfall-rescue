@@ -133,6 +133,8 @@ var hero: Sprite2D
 var hero_b: Sprite2D      # next frame, cross-faded on top for smoother motion
 var frame_tex := {}
 var anim_t := 0.0
+var pose_t := 0.0
+var pose_prev := ""
 var jit_t := 0.0
 var jit_i := 0
 var chasers := {}
@@ -1244,8 +1246,9 @@ func _escape() -> void:
 	await wait(dur)
 	hero_pose = "wave"
 	play("shine", 1.2, -4.0)
-	await wait(0.35)
-	tween(self, {"hero_alpha": 0.0}, 0.45, "lin")
+	await wait(0.55)
+	hero_pose = "walkin"
+	tween(self, {"hero_alpha": 0.0}, 0.7, "in")
 	for k in 10:
 		later(k * 0.05, func(): sparkle(wx(safe_x), wy(BY - SAFE_H * 0.5), 3))
 	await wait(0.6)
@@ -1660,6 +1663,7 @@ func _hero_frames(dt: float) -> void:
 	var idx := 0
 	var nxt := -1
 	var blend := 0.0
+	var shake_extra := 0.0
 	var fps := 7.0 + hz_p * 7.0
 	anim_t += dt * fps
 	jit_t -= dt
@@ -1667,6 +1671,10 @@ func _hero_frames(dt: float) -> void:
 		jit_t = 0.09
 		jit_i = randi() % 3 - 1
 	var by_hand := false
+	if hero_pose != pose_prev:
+		pose_prev = hero_pose
+		pose_t = 0.0
+	pose_t += dt
 	match hero_pose:
 		"push":
 			by_hand = true
@@ -1675,40 +1683,45 @@ func _hero_frames(dt: float) -> void:
 				idx = 5
 			elif hz_p < 0.35:
 				key = "push"
-				var pp := _pingpong(anim_t * 0.8, 6)
-				idx = int(pp.x)
-				nxt = int(pp.y)
-				blend = pp.z
+				var q := fmod(anim_t * 0.75, 8.0)
+				idx = int(q)
+				nxt = (idx + 1) % 8
+				blend = q - float(idx)
 			elif hz_p < 0.7:
 				key = "fright"
-				var pp := _pingpong(anim_t * 0.65, 6)
-				idx = int(pp.x)
-				nxt = int(pp.y)
-				blend = pp.z
+				var q := fmod(anim_t * 0.6, 8.0)
+				idx = int(q)
+				nxt = (idx + 1) % 8
+				blend = q - float(idx)
 			else:
 				var esc := clampi(int((hz_p - 0.7) / 0.3 * 5.0 + 0.5), 0, 5)
 				if sin(hero_t * 0.9) > 0.35:
 					key = "pound"
-					idx = int(anim_t * 0.9) % 4
+					idx = int(anim_t * 0.9) % 8
 					by_hand = false
 				else:
 					key = "panic"
 					idx = clampi(esc + jit_i, 0, 5)
 		"run":
 			key = "run"
-			var q := fmod(hero_t * 11.0, 6.0)
+			var q := fmod(hero_t * 13.0, 8.0)
 			idx = int(q)
-			nxt = (idx + 1) % 6
+			nxt = (idx + 1) % 8
 			blend = q - float(idx)
 		"scared":
-			key = "poses"
-			idx = 0
+			key = "caught"
+			idx = mini(3, int(pose_t * 6.0))
+			if idx == 3:
+				shake_extra = sin(hero_t * 50.0) * g * 0.1
 		"cheer":
-			key = "poses"
-			idx = 1
+			key = "exit"
+			idx = mini(2, int(pose_t * 7.0))
 		"wave":
-			key = "poses"
-			idx = 2
+			key = "exit"
+			idx = 3
+		"walkin":
+			key = "exit"
+			idx = 4 + int(pose_t * 5.0) % 2
 	var f: Dictionary = FramesData.FRAMES[key][idx]
 	hero.texture = frame_tex[key][idx]
 	var s: float = HERO_H * g / FramesData.FIG_H
@@ -1733,7 +1746,8 @@ func _hero_frames(dt: float) -> void:
 	var shake_px := 0.0
 	if hero_pose == "push" and hz_p > 0.55:
 		shake_px = sin(hero_t * 47.0) * g * 0.08 * hz_p
-	hero.position = Vector2(world_x - axm * s + shake_px, floor_y - float(f.h) * s)
+	shake_px += shake_extra
+	hero.position = Vector2(world_x - axm * s + shake_px, floor_y - float(f.foot[1]) * s)
 	_place_blend(key, nxt, blend, by_hand, s, floor_y, shake_px)
 	if hero_pose == "push":
 		# remember where his feet are, so running starts from the right spot
@@ -1772,7 +1786,7 @@ func _place_blend(key: String, nxt: int, blend: float, by_hand: bool, s: float, 
 	var ax: float = f.hand if by_hand else f.foot[0]
 	var world_x: float = wx(_door_face()) + facing * 2.0 if by_hand else wx(hero_x)
 	var axm: float = ax if facing > 0 else w - ax
-	hero_b.position = Vector2(world_x - axm * s + shake_px, floor_y - float(f.h) * s)
+	hero_b.position = Vector2(world_x - axm * s + shake_px, floor_y - float(f.foot[1]) * s)
 	# ease the blend so each pose holds a moment before it melts into the next
 	var e := blend * blend * (3.0 - 2.0 * blend)
 	hero_b.modulate.a = hero_alpha * e
@@ -1811,12 +1825,13 @@ func _anim(dt: float) -> void:
 	push_ph += dt * (2.4 + hz_p * 5.5)
 	var pound_now := sin(hero_t * 0.9) > 0.35 and hz_p >= 0.7 and hero_pose == "push"
 	if pound_now:
-		var ph := int(anim_t * 0.9) % 4
-		if ph % 2 == 1 and pound_prev < 0.5:
+		var ph := int(anim_t * 0.9) % 8
+		var hit := ph == 1 or ph == 3 or ph == 6
+		if hit and pound_prev < 0.5:
 			door_hit = 1.0
 			play("click", 0.55 + randf() * 0.1, -6.0)
 			buzz(10)
-		pound_prev = 1.0 if ph % 2 == 1 else 0.0
+		pound_prev = 1.0 if hit else 0.0
 	if hero_pose == "push" and state != "won":
 		look_cd -= dt
 		if look_cd <= 0.0 and hz_p > 0.12:
