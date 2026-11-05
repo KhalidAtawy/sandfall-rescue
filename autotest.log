@@ -1,0 +1,44 @@
+Godot Engine v4.4.1.stable.official.49a5bc7b6 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:360)
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+
+AUTOTEST shot 01_menu
+AUTOTEST shot L1_a_start
+AUTOTEST shot L1_b_chase
+AUTOTEST shot L1_c_caught
+AUTOTEST RESULT level=1 state=lost moves_left=0 debris=873
+AUTOTEST shot L1_d_end
+AUTOTEST shot L2_a_start
+AUTOTEST shot L2_b_chase
+AUTOTEST shot L2_c_escape
+AUTOTEST RESULT level=2 state=won moves_left=5 debris=-301
+AUTOTEST shot L2_d_end
+ERROR: Lambda capture at index 0 was freed. Passed "null" instead.
+   at: call (modules/gdscript/gdscript_lambda_callable.cpp:240)
+AUTOTEST shot L3_a_start
+AUTOTEST shot L3_b_chase
+AUTOTEST shot L3_c_escape
+AUTOTEST RESULT level=3 state=won moves_left=4 debris=-273
+AUTOTEST shot L3_d_end
+ERROR: Lambda capture at index 0 was freed. Passed "null" instead.
+   at: call (modules/gdscript/gdscript_lambda_callable.cpp:240)
+AUTOTEST shot L4_a_start
+AUTOTEST shot L4_b_chase
+AUTOTEST shot L4_c_escape
+AUTOTEST RESULT level=4 state=won moves_left=2 debris=-288
+AUTOTEST shot L4_d_end
+AUTOTEST shot L5_a_start
+AUTOTEST shot L5_b_chase
+AUTOTEST shot L5_c_escape
+AUTOTEST RESULT level=5 state=won moves_left=1 debris=-280
+AUTOTEST shot L5_d_end
+AUTOTEST shot L6_a_start
+AUTOTEST shot L6_b_chase
+AUTOTEST shot L6_c_escape
+AUTOTEST RESULT level=6 state=won moves_left=9999 debris=-290
+AUTOTEST shot L6_d_end
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2378)
+ERROR: 1 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:614)
