@@ -1679,20 +1679,16 @@ func _hero_frames(dt: float) -> void:
 		"push":
 			by_hand = true
 			if flinch > 0.0:
-				key = "panic"
-				idx = 5
+				key = "fright"
+				idx = 3
 			elif hz_p < 0.35:
 				key = "push"
 				var q := fmod(anim_t * 0.75, 8.0)
 				idx = int(q)
-				nxt = (idx + 1) % 8
-				blend = q - float(idx)
 			elif hz_p < 0.7:
 				key = "fright"
 				var q := fmod(anim_t * 0.6, 8.0)
 				idx = int(q)
-				nxt = (idx + 1) % 8
-				blend = q - float(idx)
 			else:
 				var esc := clampi(int((hz_p - 0.7) / 0.3 * 5.0 + 0.5), 0, 5)
 				if sin(hero_t * 0.9) > 0.35:
@@ -1700,19 +1696,16 @@ func _hero_frames(dt: float) -> void:
 					idx = int(anim_t * 0.9) % 8
 					by_hand = false
 				else:
-					key = "panic"
-					idx = clampi(esc + jit_i, 0, 5)
+					key = "fright"
+					idx = int(anim_t * 0.6) % 8
 		"run":
 			key = "run"
 			var q := fmod(hero_t * 13.0, 8.0)
 			idx = int(q)
-			nxt = (idx + 1) % 8
-			blend = q - float(idx)
 		"scared":
 			key = "caught"
 			idx = mini(3, int(pose_t * 6.0))
-			if idx == 3:
-				shake_extra = sin(hero_t * 50.0) * g * 0.1
+
 		"cheer":
 			key = "exit"
 			idx = mini(2, int(pose_t * 7.0))
@@ -1744,11 +1737,10 @@ func _hero_frames(dt: float) -> void:
 		world_x = wx(hero_x)
 	var axm: float = ax if facing > 0 else w - ax
 	var shake_px := 0.0
-	if hero_pose == "push" and hz_p > 0.55:
-		shake_px = sin(hero_t * 47.0) * g * 0.08 * hz_p
+
 	shake_px += shake_extra
 	hero.position = Vector2(world_x - axm * s + shake_px, floor_y - float(f.foot[1]) * s)
-	_place_blend(key, nxt, blend, by_hand, s, floor_y, shake_px)
+	hero_b.visible = false
 	if hero_pose == "push":
 		# remember where his feet are, so running starts from the right spot
 		var fx: float = f.foot[0] if facing > 0 else w - f.foot[0]
