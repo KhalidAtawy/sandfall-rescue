@@ -26,7 +26,7 @@ const SH := 110        # world height, in debris cells
 const NCOL := 4
 
 const LEVELS := [
-	{"name": "The Sand Pit", "time": 110, "theme": "sand", "moves": 22, "shaft": [3, 5], "room": "left", "fill_top": 17,
+	{"name": "The Sand Pit", "time": 110, "theme": "sand", "moves": 18, "shaft": [3, 5], "room": "left", "fill_top": 17,
 		"rubble": [[3, 5, 0, 3], [4, 4, 4, 6]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
 	{"name": "Iron Vault", "time": 125, "theme": "iron", "moves": 28, "shaft": [3, 4], "room": "right", "fill_top": 12,
 		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
@@ -153,6 +153,7 @@ var sweat_t := 1.0
 var hand_f := Vector2.ZERO
 var hand_b := Vector2.ZERO
 var hud_sec := -1
+var level_gen := 0
 var hud_pct := -1
 var golem_attack := 0.0
 var roar_t := 3.0
@@ -402,6 +403,8 @@ func start_level(i: int) -> void:
 	hero_x = _door_face() - facing * 3.9
 	door_swing = 0.0
 	safe_glow = 0.0
+	level_gen += 1
+	hero_alpha = 1.0
 	time_left = float(L.time)
 	flinch = 0.0
 	hud_sec = -1
@@ -1147,7 +1150,10 @@ func _shuffle() -> void:
 # ---------- win / lose ----------
 func _win() -> void:
 	state = "won"
+	var gen := level_gen
 	await _escape()
+	if gen != level_gen:
+		return
 	var rest = []
 	for i in sand.size():
 		if sand[i] != 0:
@@ -1155,7 +1161,7 @@ func _win() -> void:
 	for k in rest.size():
 		var i: int = rest[k]
 		later(k * 0.008, func():
-			if sand[i] == 0:
+			if gen != level_gen or sand[i] == 0:
 				return
 			var v = sand[i]
 			sand[i] = 0
@@ -1167,6 +1173,8 @@ func _win() -> void:
 				"life": 0.0, "max": 0.8, "col": theme.gtint, "v": v, "size": g * 1.4, "grav": 900.0 * g / 6.0, "kind": "grain"})
 		)
 	await wait(minf(0.8, rest.size() * 0.008) + 0.2)
+	if gen != level_gen:
+		return
 	grains = 0
 	_update_hud()
 	rubble.clear()
@@ -1174,6 +1182,8 @@ func _win() -> void:
 	play("win")
 	buzz(60)
 	await collapse()
+	if gen != level_gen:
+		return
 	var ratio = float(moves) / float(L.moves)
 	var stars = 3 if ratio >= 0.3 else (2 if ratio >= 0.12 else 1)
 	if stars > int(progress.best[level_idx]):
@@ -1182,6 +1192,8 @@ func _win() -> void:
 	for k in 30:
 		later(k * 0.04, func(): sparkle(ox + randf() * SW * g, oy + randf() * BY * g, 3))
 	await wait(0.9)
+	if gen != level_gen:
+		return
 	ui.show_win(stars, moves, L.name, level_idx < LEVELS.size() - 1)
 
 func _escape() -> void:
@@ -1220,6 +1232,7 @@ func _set_room_mask(v: int) -> void:
 
 func _lose(timed_out := false) -> void:
 	state = "lost"
+	var gen := level_gen
 	hz_target = 1.12
 	hero_pose = "scared"
 	play("boom", 0.6, -6.0)
@@ -1228,6 +1241,8 @@ func _lose(timed_out := false) -> void:
 	buzz(80)
 	play("lose")
 	await wait(1.0)
+	if gen != level_gen:
+		return
 	var left = ceili(shaft_sand * 100.0 / shaft0) if shaft_sand > 0 else 0
 	ui.show_lose(left, not extra_used, "Time's up!" if timed_out else "Zaki got caught!")
 
@@ -2189,7 +2204,11 @@ func _run_autotest() -> void:
 		else:
 			await wait(1.0)
 			await _shot("L%d_c_caught" % (lv + 1))
-		await wait(2.5)
+		var w := 0
+		while not ui.overlay.visible and w < 120:
+			await wait(0.1)
+			w += 1
+		await wait(0.5)
 		print("AUTOTEST RESULT level=%d state=%s moves_left=%d debris=%d" % [lv + 1, state, moves, grains])
 		await _shot("L%d_d_end" % (lv + 1))
 	get_tree().quit()
