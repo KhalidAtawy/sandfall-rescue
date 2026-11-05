@@ -20,7 +20,7 @@ const MODES := {
 	"drain": {"title": "Clear the Door", "text": "Match gems next to the sand to drain it. When no sand is left against the door, Zaki can open it and escape."},
 	"iron": {"title": "Heavy Iron", "text": "Iron barely moves for small matches. Make rockets, bombs and orbs: power-ups smash a whole iron block at once."},
 	"chain": {"title": "Crystal Chain", "text": "Crystals crack in chains. Every hit also cracks the crystal blocks touching it."},
-	"crust": {"title": "Cooling Lava", "text": "Lava you leave alone for 4 moves cools into hard crust. A crusted block needs one hit to crack before it breaks."},
+	"crust": {"title": "Cooling Lava", "text": "Lava you leave alone for 6 moves cools into hard crust. A crusted block needs one hit to crack before it breaks."},
 	"wrap": {"title": "Bandaged Gems", "text": "The mummy wrapped some gems in bandages, and wrapped gems are stuck in place. Match next to them to tear the bandages off, then clear the door."},
 	"race": {"title": "Cobra Race", "text": "No move limit, but the clock is ticking. Every power-up you make adds 3 seconds."},
 }
@@ -40,13 +40,13 @@ const NCOL := 4
 const LEVELS := [
 	{"name": "The Sand Pit", "mode": "drain", "time": 110, "theme": "sand", "moves": 20, "shaft": [3, 5], "room": "left", "fill_top": 6,
 		"rubble": [[3, 5, 0, 3], [4, 4, 4, 6]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
-	{"name": "Iron Vault", "mode": "iron", "time": 125, "theme": "iron", "moves": 20, "shaft": [3, 4], "room": "right", "fill_top": 6,
+	{"name": "Iron Vault", "mode": "iron", "time": 125, "theme": "iron", "moves": 18, "shaft": [3, 4], "room": "right", "fill_top": 6,
 		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
-	{"name": "Crystal Cave", "mode": "chain", "time": 145, "theme": "crystal", "moves": 18, "shaft": [5, 6], "room": "left", "fill_top": 6,
+	{"name": "Crystal Cave", "mode": "chain", "time": 145, "theme": "crystal", "moves": 16, "shaft": [5, 6], "room": "left", "fill_top": 6,
 		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
-	{"name": "Lava Forge", "mode": "crust", "time": 135, "theme": "emerald", "moves": 20, "shaft": [1, 2], "room": "right", "fill_top": 6,
+	{"name": "Lava Forge", "mode": "crust", "time": 135, "theme": "emerald", "moves": 22, "shaft": [1, 2], "room": "right", "fill_top": 6,
 		"rubble": [[1, 2, 0, 2], [0, 3, 3, 4], [3, 3, 5, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
-	{"name": "Mummy's Tomb", "mode": "wrap", "time": 145, "theme": "tomb", "moves": 19, "shaft": [2, 3], "room": "right", "fill_top": 6,
+	{"name": "Mummy's Tomb", "mode": "wrap", "time": 145, "theme": "tomb", "moves": 22, "shaft": [2, 3], "room": "right", "fill_top": 6,
 		"rubble": [[2, 3, 0, 3], [3, 5, 4, 5], [5, 6, 6, 8]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
 	{"name": "Cobra Temple", "mode": "race", "time": 80, "theme": "temple", "moves": 20, "shaft": [4, 5], "room": "left", "fill_top": 6,
 		"rubble": [[4, 5, 0, 2], [3, 6, 3, 3], [2, 3, 4, 6], [6, 7, 4, 6], [4, 5, 7, 8]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
@@ -806,7 +806,7 @@ func _cool_lava() -> void:
 	for id in rubble:
 		if crust.has(id):
 			continue
-		if move_no - int(last_hit.get(id, 0)) >= 4 and _block_has_sand(id):
+		if move_no - int(last_hit.get(id, 0)) >= 6 and _block_has_sand(id):
 			crust[id] = true
 
 func _block_has_sand(id: int) -> bool:
