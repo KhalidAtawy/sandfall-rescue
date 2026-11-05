@@ -363,6 +363,8 @@ func show_win(stars: int, moves: int, title: String, has_next: bool) -> void:
 	card_box.add_child(st)
 	for k in stars:
 		get_tree().create_timer(0.35 + k * 0.28).timeout.connect(func():
+			if not is_instance_valid(st):
+				return
 			st.n = k + 1
 			st.queue_redraw()
 			game.play("shine", 1.0 + k * 0.15, -4.0))
