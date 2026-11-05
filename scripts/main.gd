@@ -14,6 +14,7 @@ const ROOM_H := 24
 const SPIKE_W := 6.0
 const DOOR_EDGE_W := 2.6   # side view of the door, in cells
 const SAFE_H := 12.0       # safe exit door height, in cells
+const RUBBLE_HIT := 20     # grains removed from a debris block per hit
 const CHASER_H := {"golem": 20.0, "mummy": 19.0, "cobra": 17.0}
 
 const COLS := 8
@@ -26,7 +27,7 @@ const SH := 110        # world height, in debris cells
 const NCOL := 4
 
 const LEVELS := [
-	{"name": "The Sand Pit", "time": 110, "theme": "sand", "moves": 14, "shaft": [3, 5], "room": "left", "fill_top": 6,
+	{"name": "The Sand Pit", "time": 110, "theme": "sand", "moves": 18, "shaft": [3, 5], "room": "left", "fill_top": 6,
 		"rubble": [[3, 5, 0, 3], [4, 4, 4, 6]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
 	{"name": "Iron Vault", "time": 125, "theme": "iron", "moves": 16, "shaft": [3, 4], "room": "right", "fill_top": 6,
 		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
@@ -690,12 +691,17 @@ func damage_rubble(id: int) -> void:
 	var c: int = id % COLS
 	var r: int = id / COLS
 	var hit := 0
-	for y in range(BY + r * CELL, BY + (r + 1) * CELL):
+	# each hit breaks only part of the block (lowest grains first), so blocks take several hits
+	var cells := []
+	for y in range(BY + (r + 1) * CELL - 1, BY + r * CELL - 1, -1):
 		for x in range(BX + c * CELL, BX + (c + 1) * CELL):
-			var i: int = y * SW + x
-			var v = sand[i]
-			if v == 0:
-				continue
+			if sand[y * SW + x] != 0:
+				cells.append(y * SW + x)
+	for i in cells.slice(0, RUBBLE_HIT):
+		var x: int = i % SW
+		var y: int = i / SW
+		var v = sand[i]
+		if true:
 			sand[i] = 0
 			grains -= 1
 			hit += 1
