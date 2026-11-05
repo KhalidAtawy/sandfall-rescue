@@ -16,6 +16,16 @@ const SPIKE_W := 6.0
 const DOOR_EDGE_W := 2.6   # side view of the door, in cells
 const SAFE_H := 17.0       # safe exit door height, in cells
 const RUBBLE_HIT := 20     # grains removed from a debris block per hit
+const MODES := {
+	"drain": {"title": "Clear the Door", "text": "Match gems next to the sand to drain it. When no sand is left against the door, Zaki can open it and escape."},
+	"iron": {"title": "Heavy Iron", "text": "Iron barely moves for small matches. Make rockets, bombs and orbs: power-ups smash a whole iron block at once."},
+	"chain": {"title": "Crystal Chain", "text": "Crystals crack in chains. Every hit also cracks the crystal blocks touching it."},
+	"crust": {"title": "Cooling Lava", "text": "Lava you leave alone for 3 moves cools into hard crust. A crusted block needs one hit to crack before it breaks."},
+	"wrap": {"title": "Bandaged Gems", "text": "The mummy wrapped some gems in bandages, and wrapped gems are stuck in place. Match next to them to tear the bandages off, then clear the door."},
+	"race": {"title": "Cobra Race", "text": "No move limit, but the clock is ticking. Every power-up you make adds 3 seconds."},
+}
+const WRAP_COUNT := 10
+const RACE_BONUS := 3.0
 const CHASER_H := {"golem": 20.0, "mummy": 19.0, "cobra": 17.0}
 
 const COLS := 8
@@ -28,17 +38,17 @@ const SH := 110        # world height, in debris cells
 const NCOL := 4
 
 const LEVELS := [
-	{"name": "The Sand Pit", "time": 110, "theme": "sand", "moves": 20, "shaft": [3, 5], "room": "left", "fill_top": 6,
+	{"name": "The Sand Pit", "mode": "drain", "time": 110, "theme": "sand", "moves": 20, "shaft": [3, 5], "room": "left", "fill_top": 6,
 		"rubble": [[3, 5, 0, 3], [4, 4, 4, 6]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
-	{"name": "Iron Vault", "time": 125, "theme": "iron", "moves": 16, "shaft": [3, 4], "room": "right", "fill_top": 6,
+	{"name": "Iron Vault", "mode": "iron", "time": 125, "theme": "iron", "moves": 16, "shaft": [3, 4], "room": "right", "fill_top": 6,
 		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
-	{"name": "Crystal Cave", "time": 145, "theme": "crystal", "moves": 22, "shaft": [5, 6], "room": "left", "fill_top": 6,
+	{"name": "Crystal Cave", "mode": "chain", "time": 145, "theme": "crystal", "moves": 22, "shaft": [5, 6], "room": "left", "fill_top": 6,
 		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
-	{"name": "Lava Forge", "time": 135, "theme": "emerald", "moves": 17, "shaft": [1, 2], "room": "right", "fill_top": 6,
+	{"name": "Lava Forge", "mode": "crust", "time": 135, "theme": "emerald", "moves": 17, "shaft": [1, 2], "room": "right", "fill_top": 6,
 		"rubble": [[1, 2, 0, 2], [0, 3, 3, 4], [3, 3, 5, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
-	{"name": "Mummy's Tomb", "time": 145, "theme": "tomb", "moves": 16, "shaft": [2, 3], "room": "right", "fill_top": 6,
+	{"name": "Mummy's Tomb", "mode": "wrap", "time": 145, "theme": "tomb", "moves": 16, "shaft": [2, 3], "room": "right", "fill_top": 6,
 		"rubble": [[2, 3, 0, 3], [3, 5, 4, 5], [5, 6, 6, 8]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
-	{"name": "Cobra Temple", "time": 165, "theme": "temple", "moves": 20, "shaft": [4, 5], "room": "left", "fill_top": 6,
+	{"name": "Cobra Temple", "mode": "race", "time": 80, "theme": "temple", "moves": 20, "shaft": [4, 5], "room": "left", "fill_top": 6,
 		"rubble": [[4, 5, 0, 2], [3, 6, 3, 3], [2, 3, 4, 6], [6, 7, 4, 6], [4, 5, 7, 8]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
 ]
 
@@ -163,6 +173,11 @@ var hand_f := Vector2.ZERO
 var hand_b := Vector2.ZERO
 var hud_sec := -1
 var level_gen := 0
+var mode := "drain"
+var wrapped := {}          # board cell id -> true (mummy bandages)
+var crust := {}            # debris block id -> true (cooled lava)
+var last_hit := {}         # debris block id -> move number of its last hit
+var move_no := 0
 var hud_pct := -1
 var golem_attack := 0.0
 var roar_t := 3.0
@@ -458,11 +473,27 @@ func start_level(i: int) -> void:
 	bg_layer.queue_redraw()
 	frame_layer.queue_redraw()
 	ui.set_level(i + 1, L.name, theme.ui)
+	mode = L.get("mode", "drain")
+	wrapped.clear()
+	crust.clear()
+	last_hit.clear()
+	move_no = 0
+	if mode == "race":
+		moves = 9999
+	if mode == "wrap":
+		var spots := []
+		for r in range(2, ROWS):
+			for c in COLS:
+				if not is_rub(c, r):
+					spots.append(r * COLS + c)
+		spots.shuffle()
+		for id in spots.slice(0, WRAP_COUNT):
+			wrapped[id] = true
 	ui.update_hud(moves, 100)
-	ui.hide_overlay()
-	state = "idle"
+	_update_extra()
+	state = "paused"
 	last_input = time
-	ui.toast(L.tip)
+	ui.show_intro(i + 1, L.name, MODES[mode].title, MODES[mode].text)
 
 func _compute_active_region() -> void:
 	var minx = SW
@@ -624,7 +655,7 @@ func all_moves() -> Array:
 					continue
 				var a = color_at(c, r)
 				var b = color_at(c2, r2)
-				if a < 0 or b < 0 or a == b:
+				if a < 0 or b < 0 or a == b or wrapped.has(r * COLS + c) or wrapped.has(r2 * COLS + c2):
 					continue
 				var sw = [c, r, c2, r2, a, b]
 				if _line_len(sw, c, r, 1, 0) >= 3 or _line_len(sw, c, r, 0, 1) >= 3 or _line_len(sw, c2, r2, 1, 0) >= 3 or _line_len(sw, c2, r2, 0, 1) >= 3:
@@ -711,17 +742,30 @@ func _pop_gem(m: Gem, delay := 0.0) -> float:
 	)
 	return delay + 0.2
 
-func damage_rubble(id: int) -> void:
+func damage_rubble(id: int, power := false, depth := 0) -> void:
 	var c: int = id % COLS
 	var r: int = id / COLS
 	var hit := 0
+	last_hit[id] = move_no
+	if crust.has(id):
+		# cooled lava: this hit only cracks the crust
+		crust.erase(id)
+		burst(cell_cx(c), cell_cy(r), Color("3a1a10"), 14, 1.2)
+		burst(cell_cx(c), cell_cy(r), Color("ff8a2a"), 8, 0.8)
+		play("crack", 1.1, -6.0)
+		return
+	var amount := RUBBLE_HIT
+	if mode == "iron":
+		amount = 49 if power else 7
+	elif depth > 0:
+		amount = 12
 	# each hit breaks only part of the block (lowest grains first), so blocks take several hits
 	var cells := []
 	for y in range(BY + (r + 1) * CELL - 1, BY + r * CELL - 1, -1):
 		for x in range(BX + c * CELL, BX + (c + 1) * CELL):
 			if sand[y * SW + x] != 0:
 				cells.append(y * SW + x)
-	for i in cells.slice(0, RUBBLE_HIT):
+	for i in cells.slice(0, amount):
 		var x: int = i % SW
 		var y: int = i / SW
 		var v = sand[i]
@@ -734,6 +778,16 @@ func damage_rubble(id: int) -> void:
 				var sp = (120.0 + randf() * 260.0) * g / 6.0
 				parts.append({"x": wx(x + 0.5), "y": wy(y + 0.5), "vx": cos(a) * sp, "vy": sin(a) * sp, "life": 0.0,
 					"max": 0.7 + randf() * 0.4, "col": theme.gtint, "v": v, "size": g * 1.4, "grav": 900.0 * g / 6.0, "kind": "grain"})
+	if hit > 0 and mode == "chain" and depth < 2:
+		# crystals crack in chains: the touching crystal blocks crack too
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var nc: int = c + d.x
+			var nr: int = r + d.y
+			if in_b(nc, nr) and is_rub(nc, nr):
+				var nid: int = nr * COLS + nc
+				var dd: int = depth + 1
+				fx.append({"kind": "bolt", "x0": cell_cx(c), "y0": cell_cy(r), "x1": cell_cx(nc), "y1": cell_cy(nr), "life": 0.0, "max": 0.25})
+				later(0.14, func(): damage_rubble(nid, false, dd))
 	if hit > 0:
 		sand_sleep = false
 		sand_dirty = true
@@ -746,6 +800,23 @@ func _update_hud() -> void:
 	var p := maxi(0, ceili(shaft_sand * 100.0 / shaft0))
 	hud_pct = p
 	ui.update_hud(moves, p)
+
+## Lava blocks nobody has hit for 3 moves cool into crust.
+func _cool_lava() -> void:
+	for id in rubble:
+		if crust.has(id):
+			continue
+		if move_no - int(last_hit.get(id, 0)) >= 3 and _block_has_sand(id):
+			crust[id] = true
+
+func _block_has_sand(id: int) -> bool:
+	var c: int = id % COLS
+	var r: int = id / COLS
+	for y in range(BY + r * CELL, BY + (r + 1) * CELL):
+		for x in range(BX + c * CELL, BX + (c + 1) * CELL):
+			if sand[y * SW + x] != 0:
+				return true
+	return false
 
 func _count_shaft() -> int:
 	var n := 0
@@ -762,8 +833,34 @@ func _door_face() -> float:
 func door_ready() -> bool:
 	return shaft_sand <= maxi(4, roundi(shaft0 * 0.02))
 
+## The level's goal: the door is free, plus any extra goal the mode adds.
+func goal_done() -> bool:
+	return door_ready() and wrapped.is_empty()
+
+func _update_extra() -> void:
+	if mode == "wrap":
+		ui.set_extra("Bandages %d" % wrapped.size())
+	elif mode == "race":
+		ui.set_extra("No move limit")
+	else:
+		ui.set_extra("")
+
+func _unwrap(id: int) -> void:
+	if not wrapped.has(id):
+		return
+	wrapped.erase(id)
+	var c := id % COLS
+	var r := id / COLS
+	burst(cell_cx(c), cell_cy(r), Color("efe2c4"), 12, 1.0)
+	sparkle(cell_cx(c), cell_cy(r), 3)
+	play("crack", 1.6, -10.0)
+	_update_extra()
+
+func _solid(c: int, r: int) -> bool:
+	return is_rub(c, r) or wrapped.has(r * COLS + c)
+
 func _danger_target() -> float:
-	var by_moves := 1.0 - float(moves) / float(L.moves)
+	var by_moves: float = 0.0 if mode == "race" else 1.0 - float(moves) / float(L.moves)
 	var by_time := 1.0 - time_left / float(L.time)
 	return clampf(maxf(by_moves, by_time), 0.0, 1.0)
 
@@ -772,11 +869,11 @@ func collapse() -> void:
 	for c in COLS:
 		var r = ROWS - 1
 		while r >= 0:
-			if is_rub(c, r):
+			if _solid(c, r):
 				r -= 1
 				continue
 			var bottom = r
-			while r >= 0 and not is_rub(c, r):
+			while r >= 0 and not _solid(c, r):
 				r -= 1
 			var top = r + 1
 			var w = bottom
@@ -869,11 +966,17 @@ func _resolve_clusters(cls: Array) -> void:
 				var nr: int = r + d.y
 				if in_b(nc, nr) and is_rub(nc, nr):
 					rub[nr * COLS + nc] = true
+				if in_b(nc, nr) and wrapped.has(nr * COLS + nc):
+					_unwrap(nr * COLS + nc)
+			_unwrap(id)
 			if id == spawn:
 				continue
 			t_end = maxf(t_end, _pop_gem(grid[r][c]))
 		if kind != "":
 			made_special = true
+			if mode == "race":
+				time_left += RACE_BONUS
+				ui.toast("+%d seconds!" % int(RACE_BONUS))
 			var m: Gem = grid[spawn / COLS][spawn % COLS]
 			m.dying = true
 			tween(m, {"scale": 0.0}, 0.12)
@@ -892,7 +995,7 @@ func _resolve_clusters(cls: Array) -> void:
 		later(0.12, func(): play("shine", 1.0, -4.0))
 	later(0.09, func():
 		for id in rub:
-			damage_rubble(id)
+			damage_rubble(id, false)
 		if not rub.is_empty():
 			buzz(15)
 	)
@@ -1017,6 +1120,9 @@ func detonate(seeds: Array) -> void:
 				later(delay - 0.06, func(): fx.append({"kind": "bolt", "x0": x0, "y0": y0, "x1": x1, "y1": y1, "life": 0.0, "max": 0.3}))
 			if not hit.has(id) or hit[id] > delay:
 				hit[id] = delay
+			if wrapped.has(id):
+				var wid: int = id
+				later(delay, func(): _unwrap(wid))
 			if m.kind != "gem" and not triggered.has(m):
 				triggered[m] = true
 				var ns = {"c": c, "r": r, "kind": m.kind, "dir": m.dir, "delay": delay + 0.04, "src": m}
@@ -1030,7 +1136,7 @@ func detonate(seeds: Array) -> void:
 			max_d = maxf(max_d, _pop_gem(m, hit[id]))
 	for id in rub:
 		var rid: int = id
-		later(rub[id], func(): damage_rubble(rid))
+		later(rub[id], func(): damage_rubble(rid, true))
 		max_d = maxf(max_d, rub[id])
 	await wait(max_d + 0.08)
 
@@ -1038,6 +1144,11 @@ func try_swap(a: Vector2i, b: Vector2i) -> void:
 	var A = grid[a.y][a.x]
 	var B = grid[b.y][b.x]
 	if A == null or B == null or A.dying or B.dying:
+		return
+	if wrapped.has(a.y * COLS + a.x) or wrapped.has(b.y * COLS + b.x):
+		play("bad", 1.0, -8.0)
+		var wid: int = a.y * COLS + a.x if wrapped.has(a.y * COLS + a.x) else b.y * COLS + b.x
+		fx.append({"kind": "ring", "x": cell_cx(wid % COLS), "y": cell_cy(wid / COLS), "r0": g, "r1": CELL * g * 0.6, "life": 0.0, "max": 0.3, "col": Color("efe2c4")})
 		return
 	state = "busy"
 	hint = []
@@ -1053,7 +1164,8 @@ func try_swap(a: Vector2i, b: Vector2i) -> void:
 	var sa: bool = A.kind != "gem"
 	var sb: bool = B.kind != "gem"
 	if sa or sb:
-		moves -= 1
+		if mode != "race":
+			moves -= 1
 		_update_hud()
 		var seeds = []
 		if sa and sb:
@@ -1115,7 +1227,8 @@ func try_swap(a: Vector2i, b: Vector2i) -> void:
 		B.ty = B.y
 		state = "idle"
 		return
-	moves -= 1
+	if mode != "race":
+		moves -= 1
 	_update_hud()
 	await cascade()
 	await end_turn()
@@ -1127,7 +1240,8 @@ func activate(c: int, r: int) -> void:
 	state = "busy"
 	hint = []
 	selected = Vector2i(-1, -1)
-	moves -= 1
+	if mode != "race":
+		moves -= 1
 	_update_hud()
 	var sd0 = {"c": c, "r": r, "kind": m.kind, "dir": m.dir, "delay": 0.0, "src": m}
 	if m.kind == "light":
@@ -1139,16 +1253,19 @@ func activate(c: int, r: int) -> void:
 
 func end_turn() -> void:
 	shaft_sand = _count_shaft()
-	if door_ready():
+	if goal_done():
 		_win()
 		return
+	move_no += 1
+	if mode == "crust":
+		_cool_lava()
 	if moves <= 0 or time_left <= 0.0:
 		state = "busy"
 		var t0 = time
 		while time - t0 < 1.6 and sand_moved > 0:
 			await wait(0.1)
 		shaft_sand = _count_shaft()
-		if door_ready():
+		if goal_done():
 			_win()
 			return
 		_lose(time_left <= 0.0 and moves > 0)
@@ -1495,7 +1612,7 @@ func _process(dt: float) -> void:
 		if state == "idle" or state == "busy":
 			time_left = maxf(0.0, time_left - dt)
 			hz_target = _danger_target()
-			if state == "idle" and door_ready():
+			if state == "idle" and goal_done():
 				_win()
 			elif state == "idle" and time_left <= 0.0:
 				state = "busy"
@@ -2205,8 +2322,38 @@ func _draw_gems(ci: CanvasItem) -> void:
 			# soft contact shadow
 			ci.draw_circle(center + Vector2(0, s * 0.36), s * 0.32, Color(0, 0, 0, 0.18 * m.scale))
 			_draw_tex_centered(ci, _gem_tex(m), center, size, rot)
+			if wrapped.has(r * COLS + c):
+				_draw_bandage(ci, center, s)
+
+func _draw_bandage(ci: CanvasItem, c: Vector2, s: float) -> void:
+	var cream := Color("efe2c4")
+	var shade := Color("b9a47c")
+	for k in 3:
+		var ang := -0.55 + k * 0.55
+		ci.draw_set_transform(c, ang, Vector2.ONE)
+		var r := Rect2(Vector2(-s * 0.55, -s * 0.09), Vector2(s * 1.1, s * 0.18))
+		ci.draw_rect(r, cream)
+		ci.draw_rect(Rect2(r.position + Vector2(0, s * 0.13), Vector2(r.size.x, s * 0.05)), shade)
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+func _draw_crust(ci: CanvasItem) -> void:
+	var sz := CELL * g
+	for id in crust:
+		var c: int = id % COLS
+		var r: int = id / COLS
+		var p := Vector2(wx(BX + c * CELL), wy(BY + r * CELL))
+		ci.draw_rect(Rect2(p, Vector2(sz, sz)), Color(0.16, 0.07, 0.05, 0.82))
+		var rng := RandomNumberGenerator.new()
+		rng.seed = id * 7919
+		for k in 4:
+			var a := p + Vector2(rng.randf(), rng.randf()) * sz
+			var b := a + Vector2(rng.randf_range(-0.5, 0.5), rng.randf_range(-0.5, 0.5)) * sz
+			var glow := 0.7 + 0.3 * sin(time * 2.0 + id)
+			ci.draw_line(a, b, Color(1.0, 0.5, 0.15, glow), maxf(1.0, g * 0.25))
 
 func _draw_fx(ci: CanvasItem) -> void:
+	if mode == "crust":
+		_draw_crust(ci)
 	var S = CELL * g * 0.8
 	for f in fx:
 		var p: float = f.life / f.max
@@ -2319,6 +2466,7 @@ func _run_autotest() -> void:
 	await _shot("01_menu")
 	for lv in LEVELS.size():
 		start_level(lv)
+		resume()
 		await wait(1.5)
 		await _shot("L%d_a_start" % (lv + 1))
 		var n := 0

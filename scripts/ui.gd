@@ -20,6 +20,7 @@ var menu_btn: Button
 var lvl_label: Label
 var name_label: Label
 var time_label: Label
+var extra_label: Label
 var moves_panel: PanelContainer
 var moves_label: Label
 var ring: Ring
@@ -150,6 +151,8 @@ func build() -> void:
 	hud.add_child(name_label)
 	time_label = _label("1:50", font_display, 30, INK)
 	hud.add_child(time_label)
+	extra_label = _label("", font_black, 24, Color("efe2c4"))
+	hud.add_child(extra_label)
 	moves_panel = PanelContainer.new()
 	moves_panel.add_theme_stylebox_override("panel", _box(PANEL_2, GOLD_DEEP, 22, 4))
 	moves_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -216,6 +219,7 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	lvl_label.position = Vector2(pad + 96, top + 6)
 	name_label.position = Vector2(pad + 98, top + 50)
 	time_label.position = Vector2(pad + 98, top + 82)
+	extra_label.position = Vector2(pad + 250, top + 87)
 	var right = vs.x - pad
 	pct_label.position = Vector2(right - 88, top + 26)
 	ring.position = Vector2(right - 88 - 82, top + 12)
@@ -240,8 +244,11 @@ func update_time(sec: int) -> void:
 	time_label.text = "Time %d:%02d" % [sec / 60, sec % 60]
 	time_label.add_theme_color_override("font_color", Color("ff8f6b") if sec <= 15 else INK)
 
+func set_extra(text: String) -> void:
+	extra_label.text = text
+
 func update_hud(moves: int, pct: int) -> void:
-	moves_label.text = str(maxi(0, moves))
+	moves_label.text = "∞" if moves > 999 else str(maxi(0, moves))
 	moves_label.add_theme_color_override("font_color", Color("ff8f6b") if moves <= 5 else INK)
 	pct_label.text = "%d%%" % pct
 	ring.p = pct
@@ -320,6 +327,28 @@ func show_menu() -> void:
 			game.play("click")
 			game.resume())
 		card_box.add_child(b)
+	_show_card()
+
+func show_intro(n: int, title: String, mode_title: String, text: String) -> void:
+	_clear_card()
+	var lv = _label("Level %d · %s" % [n, title], font_body, 30, INK_SOFT)
+	lv.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_box.add_child(lv)
+	var t = _label(mode_title, font_display, 66, GOLD)
+	_heading(t)
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	t.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
+	card_box.add_child(t)
+	var d = _label(text, font_body, 30, INK)
+	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
+	card_box.add_child(d)
+	var b = _button("Play", "gold")
+	b.pressed.connect(func():
+		game.play("click")
+		game.resume())
+	card_box.add_child(b)
 	_show_card()
 
 func show_win(stars: int, moves: int, title: String, has_next: bool) -> void:
