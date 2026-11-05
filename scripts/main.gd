@@ -130,6 +130,7 @@ const SAVE_PATH := "user://progress.cfg"
 var bg_layer: Node2D
 var back_layer: Node2D
 var hero: Sprite2D
+var hero_b: Sprite2D      # next frame, cross-faded on top for smoother motion
 var frame_tex := {}
 var anim_t := 0.0
 var jit_t := 0.0
@@ -206,6 +207,9 @@ func _ready() -> void:
 	hero = Sprite2D.new()
 	hero.centered = false
 	add_child(hero)
+	hero_b = Sprite2D.new()
+	hero_b.centered = false
+	add_child(hero_b)
 	hz_layer = _layer(_draw_hazard)
 	sand_sprite = Sprite2D.new()
 	sand_sprite.centered = false
@@ -227,6 +231,7 @@ func _ready() -> void:
 	frame_layer.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	back_layer.z_index = 1
 	hero.z_index = 10
+	hero_b.z_index = 10
 	hz_layer.z_index = 16
 	sand_sprite.z_index = 20
 	frame_layer.z_index = 21
@@ -1653,6 +1658,8 @@ func _chaser_target(kind: String, t: float, speed: float) -> Dictionary:
 func _hero_frames(dt: float) -> void:
 	var key := "push"
 	var idx := 0
+	var nxt := -1
+	var blend := 0.0
 	var fps := 7.0 + hz_p * 7.0
 	anim_t += dt * fps
 	jit_t -= dt
@@ -1668,10 +1675,16 @@ func _hero_frames(dt: float) -> void:
 				idx = 5
 			elif hz_p < 0.35:
 				key = "push"
-				idx = int(anim_t) % 6
+				var pp := _pingpong(anim_t * 0.8, 6)
+				idx = int(pp.x)
+				nxt = int(pp.y)
+				blend = pp.z
 			elif hz_p < 0.7:
 				key = "fright"
-				idx = int(anim_t * 0.8) % 6
+				var pp := _pingpong(anim_t * 0.65, 6)
+				idx = int(pp.x)
+				nxt = int(pp.y)
+				blend = pp.z
 			else:
 				var esc := clampi(int((hz_p - 0.7) / 0.3 * 5.0 + 0.5), 0, 5)
 				if sin(hero_t * 0.9) > 0.35:
@@ -1683,7 +1696,10 @@ func _hero_frames(dt: float) -> void:
 					idx = clampi(esc + jit_i, 0, 5)
 		"run":
 			key = "run"
-			idx = int(hero_t * 12.0) % 6
+			var q := fmod(hero_t * 11.0, 6.0)
+			idx = int(q)
+			nxt = (idx + 1) % 6
+			blend = q - float(idx)
 		"scared":
 			key = "poses"
 			idx = 0
@@ -1718,6 +1734,7 @@ func _hero_frames(dt: float) -> void:
 	if hero_pose == "push" and hz_p > 0.55:
 		shake_px = sin(hero_t * 47.0) * g * 0.08 * hz_p
 	hero.position = Vector2(world_x - axm * s + shake_px, floor_y - float(f.h) * s)
+	_place_blend(key, nxt, blend, by_hand, s, floor_y, shake_px)
 	if hero_pose == "push":
 		# remember where his feet are, so running starts from the right spot
 		var fx: float = f.foot[0] if facing > 0 else w - f.foot[0]
@@ -1731,6 +1748,34 @@ func _hero_frames(dt: float) -> void:
 			var hp := hero.position + Vector2(hx, float(f.h) * 0.2 * s)
 			parts.append({"x": hp.x, "y": hp.y, "vx": -facing * (20.0 + randf() * 40.0), "vy": -40.0, "life": 0.0, "max": 0.7,
 				"col": Color(0.7, 0.88, 1.0, 0.9), "size": g * 0.35, "grav": 600.0, "kind": "dot"})
+
+## Position along a there-and-back loop of n frames: x = frame, y = next frame, z = blend 0..1.
+func _pingpong(p: float, n: int) -> Vector3:
+	var period := 2 * (n - 1)
+	var q := fmod(p, float(period))
+	var i := int(q)
+	var a: int = i if i < n else period - i
+	var j := (i + 1) % period
+	var b: int = j if j < n else period - j
+	return Vector3(a, b, q - float(i))
+
+func _place_blend(key: String, nxt: int, blend: float, by_hand: bool, s: float, floor_y: float, shake_px: float) -> void:
+	if nxt < 0 or blend <= 0.02:
+		hero_b.visible = false
+		return
+	var f: Dictionary = FramesData.FRAMES[key][nxt]
+	hero_b.visible = true
+	hero_b.texture = frame_tex[key][nxt]
+	hero_b.scale = Vector2(s, s)
+	hero_b.flip_h = facing < 0
+	var w: float = f.w
+	var ax: float = f.hand if by_hand else f.foot[0]
+	var world_x: float = wx(_door_face()) + facing * 2.0 if by_hand else wx(hero_x)
+	var axm: float = ax if facing > 0 else w - ax
+	hero_b.position = Vector2(world_x - axm * s + shake_px, floor_y - float(f.h) * s)
+	# ease the blend so each pose holds a moment before it melts into the next
+	var e := blend * blend * (3.0 - 2.0 * blend)
+	hero_b.modulate.a = hero_alpha * e
 
 func _hazard_width() -> float:
 	var hz: String = L.get("hazard", "")
