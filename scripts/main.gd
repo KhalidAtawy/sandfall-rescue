@@ -38,17 +38,17 @@ const SH := 110        # world height, in debris cells
 const NCOL := 4
 
 const LEVELS := [
-	{"name": "The Sand Pit", "mode": "drain", "time": 110, "theme": "sand", "moves": 22, "shaft": [3, 5], "room": "left", "fill_top": 6,
+	{"name": "The Sand Pit", "mode": "drain", "time": 110, "theme": "sand", "moves": 18, "shaft": [3, 5], "room": "left", "fill_top": 6,
 		"rubble": [[3, 5, 0, 2], [4, 4, 3, 4], [3, 5, 5, 6], [2, 6, 7, 8]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
-	{"name": "Iron Vault", "mode": "iron", "time": 125, "theme": "iron", "moves": 20, "shaft": [3, 4], "room": "right", "fill_top": 6,
+	{"name": "Iron Vault", "mode": "iron", "time": 125, "theme": "iron", "moves": 13, "shaft": [3, 4], "room": "right", "fill_top": 6,
 		"rubble": [[3, 4, 0, 8], [1, 6, 4, 4]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
-	{"name": "Crystal Cave", "mode": "chain", "time": 145, "theme": "crystal", "moves": 16, "shaft": [5, 6], "room": "left", "fill_top": 6,
+	{"name": "Crystal Cave", "mode": "chain", "time": 145, "theme": "crystal", "moves": 12, "shaft": [5, 6], "room": "left", "fill_top": 6,
 		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
-	{"name": "Lava Forge", "mode": "crust", "time": 135, "theme": "emerald", "moves": 25, "shaft": [1, 2], "room": "right", "fill_top": 6,
+	{"name": "Lava Forge", "mode": "crust", "time": 135, "theme": "emerald", "moves": 16, "shaft": [1, 2], "room": "right", "fill_top": 6,
 		"rubble": [[1, 2, 0, 2], [2, 4, 3, 4], [4, 5, 5, 6], [5, 7, 7, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
-	{"name": "Mummy's Tomb", "mode": "wrap", "time": 145, "theme": "tomb", "moves": 19, "shaft": [2, 3], "room": "right", "fill_top": 6,
+	{"name": "Mummy's Tomb", "mode": "wrap", "time": 145, "theme": "tomb", "moves": 14, "shaft": [2, 3], "room": "right", "fill_top": 6,
 		"rubble": [[2, 3, 0, 3], [1, 6, 4, 4], [4, 5, 5, 8]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
-	{"name": "Cobra Temple", "mode": "race", "time": 80, "theme": "temple", "moves": 20, "shaft": [4, 5], "room": "left", "fill_top": 6,
+	{"name": "Cobra Temple", "mode": "race", "time": 60, "theme": "temple", "moves": 20, "shaft": [4, 5], "room": "left", "fill_top": 6,
 		"rubble": [[4, 5, 0, 1], [2, 5, 2, 2], [2, 3, 3, 4], [2, 6, 5, 5], [5, 6, 6, 7], [1, 6, 8, 8]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
 ]
 
