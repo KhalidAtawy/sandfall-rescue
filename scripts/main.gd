@@ -39,17 +39,17 @@ const NCOL := 4
 
 const LEVELS := [
 	{"name": "The Sand Pit", "mode": "drain", "time": 110, "theme": "sand", "moves": 18, "shaft": [3, 5], "room": "left", "fill_top": 6,
-		"rubble": [[3, 5, 0, 2], [4, 4, 3, 4], [3, 5, 5, 6], [2, 6, 7, 8]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
+		"rubble": [[3, 5, 0, 2], [4, 4, 3, 4], [3, 5, 5, 6], [2, 6, 7, 7]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
 	{"name": "Iron Vault", "mode": "iron", "time": 125, "theme": "iron", "moves": 13, "shaft": [3, 4], "room": "right", "fill_top": 6,
-		"rubble": [[3, 4, 0, 8], [1, 6, 4, 4]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
+		"rubble": [[3, 4, 0, 3], [2, 5, 4, 6]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
 	{"name": "Crystal Cave", "mode": "chain", "time": 145, "theme": "crystal", "moves": 12, "shaft": [5, 6], "room": "left", "fill_top": 6,
-		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
+		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 7]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
 	{"name": "Lava Forge", "mode": "crust", "time": 135, "theme": "emerald", "moves": 16, "shaft": [1, 2], "room": "right", "fill_top": 6,
-		"rubble": [[1, 2, 0, 2], [2, 4, 3, 4], [4, 5, 5, 6], [5, 7, 7, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
+		"rubble": [[1, 2, 0, 2], [2, 4, 3, 4], [4, 5, 5, 6], [5, 6, 7, 7]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
 	{"name": "Mummy's Tomb", "mode": "wrap", "time": 145, "theme": "tomb", "moves": 14, "shaft": [2, 3], "room": "right", "fill_top": 6,
-		"rubble": [[2, 3, 0, 3], [1, 6, 4, 4], [4, 5, 5, 8]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
+		"rubble": [[2, 3, 0, 2], [1, 4, 3, 4], [1, 6, 5, 6]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
 	{"name": "Cobra Temple", "mode": "race", "time": 60, "theme": "temple", "moves": 20, "shaft": [4, 5], "room": "left", "fill_top": 6,
-		"rubble": [[4, 5, 0, 1], [2, 5, 2, 2], [2, 3, 3, 4], [2, 6, 5, 5], [5, 6, 6, 7], [1, 6, 8, 8]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
+		"rubble": [[4, 5, 0, 1], [2, 5, 2, 2], [2, 3, 3, 4], [2, 6, 5, 5], [5, 6, 6, 7]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
 ]
 
 const THEMES := {
