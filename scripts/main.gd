@@ -17,7 +17,7 @@ const DOOR_EDGE_W := 2.6   # side view of the door, in cells
 const SAFE_H := 17.0       # safe exit door height, in cells
 const RUBBLE_HIT := 20     # grains removed from a debris block per hit
 const MODES := {
-	"drain": {"title": "Clear the Door", "text": "Match gems next to the sand to drain it. When no sand is left against the door, Zaki can open it and escape."},
+	"drain": {"title": "Clear the Door", "text": "Match gems next to the sand to drain it. When no sand is left against the door, Zaki can open it and escape.\n\nNew: a 2x2 square makes a Scarab that flies into the debris. A gem touching a line of 3 from the side joins the match."},
 	"iron": {"title": "Heavy Iron", "text": "Iron barely moves for small matches. Make rockets, bombs and orbs: power-ups smash a whole iron block at once."},
 	"chain": {"title": "Crystal Chain", "text": "Crystals crack in chains. Every hit also cracks the crystal blocks touching it."},
 	"crust": {"title": "Cooling Lava", "text": "Lava you leave alone for 6 moves cools into hard crust. A crusted block needs one hit to crack before it breaks."},
@@ -39,17 +39,17 @@ const NCOL := 4
 
 const LEVELS := [
 	{"name": "The Sand Pit", "mode": "drain", "time": 110, "theme": "sand", "moves": 22, "shaft": [3, 5], "room": "left", "fill_top": 6,
-		"rubble": [[3, 5, 0, 3], [4, 4, 4, 6]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
+		"rubble": [[3, 5, 0, 2], [4, 4, 3, 4], [3, 5, 5, 6], [2, 6, 7, 8]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
 	{"name": "Iron Vault", "mode": "iron", "time": 125, "theme": "iron", "moves": 20, "shaft": [3, 4], "room": "right", "fill_top": 6,
-		"rubble": [[3, 4, 0, 4], [2, 3, 5, 7]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
+		"rubble": [[3, 4, 0, 8], [1, 6, 4, 4]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
 	{"name": "Crystal Cave", "mode": "chain", "time": 145, "theme": "crystal", "moves": 16, "shaft": [5, 6], "room": "left", "fill_top": 6,
 		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 8]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
 	{"name": "Lava Forge", "mode": "crust", "time": 135, "theme": "emerald", "moves": 25, "shaft": [1, 2], "room": "right", "fill_top": 6,
-		"rubble": [[1, 2, 0, 2], [0, 3, 3, 4], [3, 3, 5, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
+		"rubble": [[1, 2, 0, 2], [2, 4, 3, 4], [4, 5, 5, 6], [5, 7, 7, 8]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
 	{"name": "Mummy's Tomb", "mode": "wrap", "time": 145, "theme": "tomb", "moves": 19, "shaft": [2, 3], "room": "right", "fill_top": 6,
-		"rubble": [[2, 3, 0, 3], [3, 5, 4, 5], [5, 6, 6, 8]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
+		"rubble": [[2, 3, 0, 3], [1, 6, 4, 4], [4, 5, 5, 8]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
 	{"name": "Cobra Temple", "mode": "race", "time": 80, "theme": "temple", "moves": 20, "shaft": [4, 5], "room": "left", "fill_top": 6,
-		"rubble": [[4, 5, 0, 2], [3, 6, 3, 3], [2, 3, 4, 6], [6, 7, 4, 6], [4, 5, 7, 8]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
+		"rubble": [[4, 5, 0, 1], [2, 5, 2, 2], [2, 3, 3, 4], [2, 6, 5, 5], [5, 6, 6, 7], [1, 6, 8, 8]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
 ]
 
 const THEMES := {
@@ -291,6 +291,7 @@ func _load_textures() -> void:
 	for n in []:
 		tex[n] = load("res://assets/gfx/props/%s.png" % n)
 	tex.gems = [tex.gem_red, tex.gem_blue, tex.gem_gold, tex.gem_green]
+	tex.scarab = load("res://assets/gfx/board/scarab.png") if ResourceLoader.exists("res://assets/gfx/board/scarab.png") else tex.gem_green
 	var gt := GradientTexture2D.new()
 	gt.width = 128
 	gt.height = 128
@@ -394,6 +395,7 @@ func start_level(i: int) -> void:
 		for r in range(rect[2], rect[3] + 1):
 			for c in range(rect[0], rect[1] + 1):
 				rubble[r * COLS + c] = true
+	_fill_pockets()
 	var c0: int = L.shaft[0]
 	var c1: int = L.shaft[1]
 	shaft = {"x0": BX + c0 * CELL, "x1": BX + (c1 + 1) * CELL, "y0": 3}
@@ -495,6 +497,31 @@ func start_level(i: int) -> void:
 	last_input = time
 	ui.show_intro(i + 1, L.name, MODES[mode].title, MODES[mode].text)
 
+## Gem areas too small to play in (cut off by debris) are filled with debris instead.
+func _fill_pockets() -> void:
+	var seen := {}
+	for r in ROWS:
+		for c in COLS:
+			var id := r * COLS + c
+			if rubble.has(id) or seen.has(id):
+				continue
+			var comp := [id]
+			seen[id] = true
+			var i := 0
+			while i < comp.size():
+				var cur: int = comp[i]
+				i += 1
+				for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					var nc: int = cur % COLS + d.x
+					var nr: int = cur / COLS + d.y
+					var nid := nr * COLS + nc
+					if in_b(nc, nr) and not rubble.has(nid) and not seen.has(nid):
+						seen[nid] = true
+						comp.append(nid)
+			if comp.size() < 12:
+				for cid in comp:
+					rubble[cid] = true
+
 func _compute_active_region() -> void:
 	var minx = SW
 	var maxx := 0
@@ -589,7 +616,8 @@ func find_clusters() -> Array:
 					cells.append(y * COLS + c)
 				runs.append({"h": false, "cells": cells})
 			r = e + 1
-	if runs.is_empty():
+	var squares := _find_squares()
+	if runs.is_empty() and squares.is_empty():
 		return []
 	# union runs sharing cells into clusters
 	var owner_of := {}
@@ -617,10 +645,52 @@ func find_clusters() -> Array:
 				clusters[oi] = {"cells": {}, "runs": []}
 			cl.cells[id] = true
 			owner_of[id] = hit
+	# a 2x2 square of one colour is a match on its own, or joins the line it touches
+	for sq in squares:
+		var hit := -1
+		for id in sq:
+			if owner_of.has(id):
+				hit = owner_of[id]
+				break
+		if hit < 0:
+			hit = clusters.size()
+			clusters.append({"cells": {}, "runs": []})
+		clusters[hit]["square"] = true
+		for id in sq:
+			clusters[hit].cells[id] = true
+			owner_of[id] = hit
+	# a same-colour gem touching a line from the side joins it (an L or T of 4)
+	for ci in clusters.size():
+		var cl: Dictionary = clusters[ci]
+		if cl.cells.is_empty() or cl.runs.is_empty():
+			continue
+		var add := []
+		for id in cl.cells:
+			var k := color_at(id % COLS, id / COLS)
+			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var nc: int = id % COLS + d.x
+				var nr: int = id / COLS + d.y
+				var nid := nr * COLS + nc
+				if in_b(nc, nr) and not owner_of.has(nid) and color_at(nc, nr) == k:
+					add.append(nid)
+		for nid in add:
+			if not owner_of.has(nid):
+				cl.cells[nid] = true
+				owner_of[nid] = ci
+				cl["bent"] = true
 	var out = []
 	for cl in clusters:
 		if not cl.cells.is_empty():
 			out.append(cl)
+	return out
+
+func _find_squares() -> Array:
+	var out := []
+	for r in ROWS - 1:
+		for c in COLS - 1:
+			var k := color_at(c, r)
+			if k >= 0 and color_at(c + 1, r) == k and color_at(c, r + 1) == k and color_at(c + 1, r + 1) == k:
+				out.append([r * COLS + c, r * COLS + c + 1, (r + 1) * COLS + c, (r + 1) * COLS + c + 1])
 	return out
 
 # colour at (x, y) as if the gems at sw[0..1] and sw[2..3] were swapped (sw[4], sw[5] = their colours)
@@ -630,6 +700,15 @@ func _color_sw(x: int, y: int, sw: Array) -> int:
 	if x == sw[2] and y == sw[3]:
 		return sw[4]
 	return color_at(x, y)
+
+func _square_sw(sw: Array, c: int, r: int) -> bool:
+	var k := _color_sw(c, r, sw)
+	for o in [Vector2i(0, 0), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(-1, -1)]:
+		var x: int = c + o.x
+		var y: int = r + o.y
+		if _color_sw(x, y, sw) == k and _color_sw(x + 1, y, sw) == k and _color_sw(x, y + 1, sw) == k and _color_sw(x + 1, y + 1, sw) == k:
+			return true
+	return false
 
 func _line_len(sw: Array, c: int, r: int, dx: int, dy: int) -> int:
 	var k = _color_sw(c, r, sw)
@@ -658,7 +737,7 @@ func all_moves() -> Array:
 				if a < 0 or b < 0 or a == b or wrapped.has(r * COLS + c) or wrapped.has(r2 * COLS + c2):
 					continue
 				var sw = [c, r, c2, r2, a, b]
-				if _line_len(sw, c, r, 1, 0) >= 3 or _line_len(sw, c, r, 0, 1) >= 3 or _line_len(sw, c2, r2, 1, 0) >= 3 or _line_len(sw, c2, r2, 0, 1) >= 3:
+				if _line_len(sw, c, r, 1, 0) >= 3 or _line_len(sw, c, r, 0, 1) >= 3 or _line_len(sw, c2, r2, 1, 0) >= 3 or _line_len(sw, c2, r2, 0, 1) >= 3 or _square_sw(sw, c, r) or _square_sw(sw, c2, r2):
 					out.append([Vector2i(c, r), Vector2i(c2, r2)])
 	return out
 
@@ -926,6 +1005,8 @@ func _pick_spawn(cl: Dictionary) -> int:
 		for id in cnt:
 			if cnt[id] > 1:
 				return id
+	if cl.runs.is_empty():
+		return cl.cells.keys()[0]
 	var longest: Dictionary = cl.runs[0]
 	for rn in cl.runs:
 		if rn.cells.size() > longest.cells.size():
@@ -952,11 +1033,18 @@ func _resolve_clusters(cls: Array) -> void:
 			kind = "light"
 		elif has_h and has_v:
 			kind = "bomb"
+		elif cl.get("square", false):
+			kind = "scarab"
 		elif max_len == 4:
 			kind = "rocket"
 			for rn in cl.runs:
 				if rn.cells.size() == 4:
 					dir = "v" if rn.h else "h"
+		elif cl.get("bent", false) and cl.cells.size() >= 5:
+			kind = "bomb"
+		elif cl.get("bent", false):
+			kind = "rocket"
+			dir = "h" if cl.runs[0].h else "v"
 		var spawn = _pick_spawn(cl) if kind != "" else -1
 		for id in cl.cells:
 			var c: int = id % COLS
@@ -1010,10 +1098,40 @@ func cascade() -> void:
 		last_swap = []
 		await collapse()
 
+func _scarab_target(c0: int, r0: int) -> int:
+	var best := -1
+	var best_n := 0
+	for id in rubble:
+		var n := 0
+		var bc: int = id % COLS
+		var br: int = id / COLS
+		for y in range(BY + br * CELL, BY + (br + 1) * CELL):
+			for x in range(BX + bc * CELL, BX + (bc + 1) * CELL):
+				if sand[y * SW + x] != 0:
+					n += 1
+		n += (ROWS - br) * 3   # prefer blocks near the top, closer to the door
+		if n > best_n:
+			best_n = n
+			best = id
+	if best < 0:
+		best = randi() % (COLS * ROWS)
+	return best
+
 func _area_for(s: Dictionary) -> Array:
 	var out = []
 	var c: int = s.c
 	var r: int = s.r
+	if s.kind == "scarab":
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if in_b(c + d.x, r + d.y):
+				out.append([c + d.x, r + d.y, 0.05])
+		if not s.has("target"):
+			s.target = _scarab_target(c, r)
+		var t: int = s.target
+		out.append([t % COLS, t / COLS, 0.45])
+		if is_rub(t % COLS, t / COLS):
+			later(0.6, func(): damage_rubble(t, true))
+		return out
 	var row = func(y: int, from: int) -> void:
 		if y < 0 or y >= ROWS:
 			return
@@ -1059,6 +1177,13 @@ func _spawn_fx(s: Dictionary) -> void:
 	var y = cell_cy(s.r)
 	var s2 = CELL * g
 	var k: String = s.kind
+	if k == "scarab":
+		var t: int = s.get("target", -1)
+		if t >= 0:
+			fx.append({"kind": "scarab", "x0": x, "y0": y, "x1": cell_cx(t % COLS), "y1": cell_cy(t / COLS), "life": 0.0, "max": 0.45})
+		play("zap", 1.5, -6.0)
+		buzz(20)
+		return
 	if k == "rocket" or k == "cross" or k == "big":
 		var dirs = []
 		if k != "rocket" or s.dir == "h":
@@ -2270,6 +2395,8 @@ func _gem_tex(m: Gem) -> Texture2D:
 			return tex.bomb
 		"light":
 			return tex.light
+		"scarab":
+			return tex.scarab
 	return tex.gem_red
 
 func _draw_gems(ci: CanvasItem) -> void:
@@ -2365,6 +2492,11 @@ func _draw_fx(ci: CanvasItem) -> void:
 			"rkt":
 				var ang = atan2(f.vy, f.vx)
 				_draw_tex_centered(ci, tex.rocket, Vector2(f.x, f.y), Vector2(S, S), ang + 0.35)
+			"scarab":
+				var e := p * p * (3.0 - 2.0 * p)
+				var pos := Vector2(lerpf(f.x0, f.x1, e), lerpf(f.y0, f.y1, e) - sin(p * PI) * CELL * g * 1.5)
+				var ss := CELL * g * 0.8
+				_draw_tex_centered(ci, tex.scarab, pos, Vector2(ss, ss), sin(time * 30.0) * 0.25)
 			"bolt":
 				var pts := PackedVector2Array()
 				pts.append(Vector2(f.x0, f.y0))
