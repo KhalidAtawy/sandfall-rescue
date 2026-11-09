@@ -291,7 +291,10 @@ func _load_textures() -> void:
 	for n in []:
 		tex[n] = load("res://assets/gfx/props/%s.png" % n)
 	tex.gems = [tex.gem_red, tex.gem_blue, tex.gem_gold, tex.gem_green]
-	tex.scarab = load("res://assets/gfx/board/scarab.png") if ResourceLoader.exists("res://assets/gfx/board/scarab.png") else tex.gem_green
+	tex.scarab = load("res://assets/gfx/board/scarab.png")
+	for n in ["rock_chips", "dust_puff", "sparks", "crystal_bolt", "lava_chunks", "crust_crack", "crust", "bandage_tear",
+			"bandage", "combo_burst", "scarab_trail", "iron_dent", "crystal_cracks"]:
+		tex["fx_" + n] = load("res://assets/gfx/fx/%s.png" % n)
 	var gt := GradientTexture2D.new()
 	gt.width = 128
 	gt.height = 128
@@ -495,7 +498,8 @@ func start_level(i: int) -> void:
 	_update_extra()
 	state = "paused"
 	last_input = time
-	ui.show_intro(i + 1, L.name, MODES[mode].title, MODES[mode].text)
+	var badge := "res://assets/gfx/badges/badge_%s.png" % mode
+	ui.show_intro(i + 1, L.name, MODES[mode].title, MODES[mode].text, load(badge) if ResourceLoader.exists(badge) else null)
 
 ## Gem areas too small to play in (cut off by debris) are filled with debris instead.
 func _fill_pockets() -> void:
@@ -789,6 +793,11 @@ func later(t: float, fn: Callable) -> void:
 	get_tree().create_timer(maxf(0.0, t)).timeout.connect(fn)
 
 # ---------- effects ----------
+## A one-shot sprite effect. `cell` picks a frame from a strip of `frames` equal squares.
+func spr(t: Texture2D, x: float, y: float, s0: float, s1: float, dur: float, rot := 0.0, cell := -1, frames := 1, spin := 0.0) -> void:
+	fx.append({"kind": "spr", "tex": t, "x": x, "y": y, "s0": s0, "s1": s1, "life": 0.0, "max": dur, "rot": rot,
+		"cell": cell, "frames": frames, "spin": spin})
+
 func burst(x: float, y: float, col: Color, n := 10, spd := 1.0) -> void:
 	for i in n:
 		var a = randf() * TAU
@@ -829,9 +838,12 @@ func damage_rubble(id: int, power := false, depth := 0) -> void:
 	if crust.has(id):
 		# cooled lava: this hit only cracks the crust
 		crust.erase(id)
-		burst(cell_cx(c), cell_cy(r), Color("3a1a10"), 14, 1.2)
-		burst(cell_cx(c), cell_cy(r), Color("ff8a2a"), 8, 0.8)
+		spr(tex.fx_crust_crack, cell_cx(c), cell_cy(r), CELL * g * 1.0, CELL * g * 1.8, 0.45, randf() * TAU)
+		for k in 4:
+			spr(tex.fx_lava_chunks, cell_cx(c) + (randf() - 0.5) * CELL * g, cell_cy(r) + (randf() - 0.5) * CELL * g,
+				CELL * g * 0.5, CELL * g * 0.8, 0.5, randf() * TAU, -1, 1, (randf() - 0.5) * 4.0)
 		play("crack", 1.1, -6.0)
+		buzz(20)
 		return
 	var amount := RUBBLE_HIT
 	if mode == "iron":
@@ -865,12 +877,27 @@ func damage_rubble(id: int, power := false, depth := 0) -> void:
 			if in_b(nc, nr) and is_rub(nc, nr):
 				var nid: int = nr * COLS + nc
 				var dd: int = depth + 1
-				fx.append({"kind": "bolt", "x0": cell_cx(c), "y0": cell_cy(r), "x1": cell_cx(nc), "y1": cell_cy(nr), "life": 0.0, "max": 0.25})
+				fx.append({"kind": "cbolt", "x0": cell_cx(c), "y0": cell_cy(r), "x1": cell_cx(nc), "y1": cell_cy(nr), "life": 0.0, "max": 0.35})
 				later(0.14, func(): damage_rubble(nid, false, dd))
 	if hit > 0:
 		sand_sleep = false
 		sand_dirty = true
 		sparkle(cell_cx(c), cell_cy(r), 3)
+		var left := 1.0 - float(cells.size() - hit) / float(CELL * CELL)
+		var stage := clampi(int(left * 3.0), 0, 2)
+		var cx := cell_cx(c)
+		var cy := cell_cy(r)
+		match mode:
+			"iron":
+				spr(tex.fx_iron_dent, cx, cy, CELL * g, CELL * g * 1.05, 0.5, 0.0, stage, 3)
+				spr(tex.fx_sparks, cx, cy, CELL * g * 0.6, CELL * g * 1.6, 0.35, randf() * TAU)
+			"chain":
+				spr(tex.fx_crystal_cracks, cx, cy, CELL * g, CELL * g * 1.05, 0.5, 0.0, stage, 3)
+			"crust":
+				spr(tex.fx_lava_chunks, cx, cy, CELL * g * 0.6, CELL * g * 1.3, 0.4, randf() * TAU, -1, 1, 2.0)
+			_:
+				spr(tex.fx_dust_puff, cx, cy, CELL * g * 0.6, CELL * g * 1.5, 0.45, randf() * TAU)
+				spr(tex.fx_rock_chips, cx, cy, CELL * g * 0.5, CELL * g * 1.4, 0.4, randf() * TAU, -1, 1, 1.5)
 		fx.append({"kind": "ring", "x": cell_cx(c), "y": cell_cy(r), "r0": g, "r1": CELL * g * 0.8, "life": 0.0, "max": 0.35,
 			"col": Color("fff2c0")})
 	_update_hud()
@@ -930,7 +957,7 @@ func _unwrap(id: int) -> void:
 	wrapped.erase(id)
 	var c := id % COLS
 	var r := id / COLS
-	burst(cell_cx(c), cell_cy(r), Color("efe2c4"), 12, 1.0)
+	spr(tex.fx_bandage_tear, cell_cx(c), cell_cy(r), CELL * g * 0.9, CELL * g * 1.8, 0.45, randf() * TAU)
 	sparkle(cell_cx(c), cell_cy(r), 3)
 	play("crack", 1.6, -10.0)
 	_update_extra()
@@ -1076,6 +1103,7 @@ func _resolve_clusters(cls: Array) -> void:
 				m.color = -1
 				m.dying = false
 				sparkle(cell_cx(m.x), cell_cy(m.y), 6)
+				spr(tex.fx_combo_burst, cell_cx(m.x), cell_cy(m.y), CELL * g * 0.6, CELL * g * 2.2, 0.5, 0.0, -1, 1, 1.2)
 				tween(m, {"scale": 1.0}, 0.26, "back")
 			)
 			t_end = maxf(t_end, 0.4)
@@ -1130,6 +1158,7 @@ func _area_for(s: Dictionary) -> Array:
 		var t: int = s.target
 		out.append([t % COLS, t / COLS, 0.45])
 		if is_rub(t % COLS, t / COLS):
+			later(0.45, func(): spr(tex.fx_combo_burst, cell_cx(t % COLS), cell_cy(t / COLS), CELL * g, CELL * g * 2.4, 0.4))
 			later(0.6, func(): damage_rubble(t, true))
 		return out
 	var row = func(y: int, from: int) -> void:
@@ -2453,30 +2482,15 @@ func _draw_gems(ci: CanvasItem) -> void:
 				_draw_bandage(ci, center, s)
 
 func _draw_bandage(ci: CanvasItem, c: Vector2, s: float) -> void:
-	var cream := Color("efe2c4")
-	var shade := Color("b9a47c")
-	for k in 3:
-		var ang := -0.55 + k * 0.55
-		ci.draw_set_transform(c, ang, Vector2.ONE)
-		var r := Rect2(Vector2(-s * 0.55, -s * 0.09), Vector2(s * 1.1, s * 0.18))
-		ci.draw_rect(r, cream)
-		ci.draw_rect(Rect2(r.position + Vector2(0, s * 0.13), Vector2(r.size.x, s * 0.05)), shade)
-	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_tex_centered(ci, tex.fx_bandage, c, Vector2(s, s) * 1.08)
 
 func _draw_crust(ci: CanvasItem) -> void:
 	var sz := CELL * g
 	for id in crust:
 		var c: int = id % COLS
 		var r: int = id / COLS
-		var p := Vector2(wx(BX + c * CELL), wy(BY + r * CELL))
-		ci.draw_rect(Rect2(p, Vector2(sz, sz)), Color(0.16, 0.07, 0.05, 0.82))
-		var rng := RandomNumberGenerator.new()
-		rng.seed = id * 7919
-		for k in 4:
-			var a := p + Vector2(rng.randf(), rng.randf()) * sz
-			var b := a + Vector2(rng.randf_range(-0.5, 0.5), rng.randf_range(-0.5, 0.5)) * sz
-			var glow := 0.7 + 0.3 * sin(time * 2.0 + id)
-			ci.draw_line(a, b, Color(1.0, 0.5, 0.15, glow), maxf(1.0, g * 0.25))
+		var glow := 0.88 + 0.12 * sin(time * 2.0 + id)
+		_draw_tex_centered(ci, tex.fx_crust, Vector2(cell_cx(c), cell_cy(r)), Vector2(sz, sz) * 1.02, 0.0, Color(glow, glow, glow))
 
 func _draw_fx(ci: CanvasItem) -> void:
 	if mode == "crust":
@@ -2495,8 +2509,39 @@ func _draw_fx(ci: CanvasItem) -> void:
 			"scarab":
 				var e := p * p * (3.0 - 2.0 * p)
 				var pos := Vector2(lerpf(f.x0, f.x1, e), lerpf(f.y0, f.y1, e) - sin(p * PI) * CELL * g * 1.5)
-				var ss := CELL * g * 0.8
-				_draw_tex_centered(ci, tex.scarab, pos, Vector2(ss, ss), sin(time * 30.0) * 0.25)
+				var ss := CELL * g * 0.9
+				var e2: float = maxf(0.0, p - 0.08)
+				var e2s := e2 * e2 * (3.0 - 2.0 * e2)
+				var prev := Vector2(lerpf(f.x0, f.x1, e2s), lerpf(f.y0, f.y1, e2s) - sin(e2 * PI) * CELL * g * 1.5)
+				var tl := ss * 1.6
+				var tt: Texture2D = tex.fx_scarab_trail
+				ci.draw_set_transform(pos, (pos - prev).angle(), Vector2.ONE)
+				ci.draw_texture_rect(tt, Rect2(-tl, -tl * 0.25, tl, tl * 0.5), false, Color(1, 1, 1, 0.9))
+				ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+				_draw_tex_centered(ci, tex.scarab, pos, Vector2(ss, ss), sin(time * 30.0) * 0.15)
+			"spr":
+				var t: Texture2D = f.tex
+				var sz: float = lerpf(f.s0, f.s1, 1.0 - (1.0 - p) * (1.0 - p))
+				var a: float = 1.0 - p * p
+				var ang: float = f.rot + f.spin * p
+				ci.draw_set_transform(Vector2(f.x, f.y), ang, Vector2.ONE)
+				if f.cell >= 0:
+					var cw: float = t.get_width() / float(f.frames)
+					ci.draw_texture_rect_region(t, Rect2(-sz / 2.0, -sz / 2.0, sz, sz), Rect2(f.cell * cw, 0, cw, t.get_height()), Color(1, 1, 1, a))
+				else:
+					var asp: float = float(t.get_height()) / t.get_width()
+					ci.draw_texture_rect(t, Rect2(-sz / 2.0, -sz * asp / 2.0, sz, sz * asp), false, Color(1, 1, 1, a))
+				ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			"cbolt":
+				# crystal lightning stretched from one block to the next
+				var a0 := Vector2(f.x0, f.y0)
+				var a1 := Vector2(f.x1, f.y1)
+				var t: Texture2D = tex.fx_crystal_bolt
+				var ln := a0.distance_to(a1) * 1.3
+				var hh: float = ln * t.get_height() / t.get_width()
+				ci.draw_set_transform((a0 + a1) / 2.0, (a1 - a0).angle(), Vector2.ONE)
+				ci.draw_texture_rect(t, Rect2(-ln / 2.0, -hh / 2.0, ln, hh), false, Color(1, 1, 1, 1.0 - p))
+				ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			"bolt":
 				var pts := PackedVector2Array()
 				pts.append(Vector2(f.x0, f.y0))
