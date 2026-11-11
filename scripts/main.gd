@@ -9,6 +9,8 @@ const Rig := preload("res://scripts/rig.gd")
 const RigData := preload("res://scripts/rig_data.gd")
 const Puppet := preload("res://scripts/puppet.gd")
 const FramesData := preload("res://scripts/frames_data.gd")
+const LevelsData := preload("res://scripts/levels_data.gd")
+const Meta := preload("res://scripts/meta.gd")
 const HERO_H := 15.0      # hero height in world cells
 const HERO_PX := 1126.0   # hero height in rig pixels
 const ROOM_H := 24
@@ -37,20 +39,18 @@ const SW := 60         # world width, in debris cells
 const SH := 110        # world height, in debris cells
 const NCOL := 4
 
-const LEVELS := [
-	{"name": "The Sand Pit", "mode": "drain", "time": 110, "theme": "sand", "moves": 18, "shaft": [3, 5], "room": "left", "fill_top": 6,
-		"rubble": [[3, 5, 0, 2], [4, 4, 3, 4], [3, 5, 5, 6], [2, 6, 7, 7]], "hazard": "spikes", "tip": "The spike wall moves with every move. Drain the sand fast!"},
-	{"name": "Iron Vault", "mode": "iron", "time": 125, "theme": "iron", "moves": 13, "shaft": [3, 4], "room": "right", "fill_top": 6,
-		"rubble": [[3, 4, 0, 3], [2, 5, 4, 6]], "hazard": "water", "tip": "The vault is flooding! Rockets and bombs blast through debris."},
-	{"name": "Crystal Cave", "mode": "chain", "time": 145, "theme": "crystal", "moves": 12, "shaft": [5, 6], "room": "left", "fill_top": 6,
-		"rubble": [[5, 6, 0, 2], [4, 5, 3, 4], [3, 4, 5, 6], [2, 3, 7, 7]], "hazard": "golem", "tip": "A rock golem is coming! Follow the crystals down."},
-	{"name": "Lava Forge", "mode": "crust", "time": 135, "theme": "emerald", "moves": 16, "shaft": [1, 2], "room": "right", "fill_top": 6,
-		"rubble": [[1, 2, 0, 2], [2, 4, 3, 4], [4, 5, 5, 6], [5, 6, 7, 7]], "hazard": "lava", "tip": "Lava is pouring in! Tap a power-up to fire it."},
-	{"name": "Mummy's Tomb", "mode": "wrap", "time": 145, "theme": "tomb", "moves": 14, "shaft": [2, 3], "room": "right", "fill_top": 6,
-		"rubble": [[2, 3, 0, 2], [1, 4, 3, 4], [1, 6, 5, 6]], "hazard": "mummy", "tip": "The mummy woke up! Drain the tomb before it reaches Zaki."},
-	{"name": "Cobra Temple", "mode": "race", "time": 60, "theme": "temple", "moves": 20, "shaft": [4, 5], "room": "left", "fill_top": 6,
-		"rubble": [[4, 5, 0, 1], [2, 5, 2, 2], [2, 3, 3, 4], [2, 6, 5, 5], [5, 6, 6, 7]], "hazard": "cobra", "tip": "A giant cobra guards the temple. Split the debris both ways!"},
-]
+const LEVELS = LevelsData.LEVELS
+const WORLDS = LevelsData.WORLDS
+const MODE_SHORT := {
+	"drain": "Clear the sand from the door.",
+	"iron": "Iron: power-ups smash whole blocks.",
+	"chain": "Crystals crack in chains.",
+	"crust": "Untouched lava cools into crust.",
+	"wrap": "Free the bandaged gems too.",
+	"race": "No move limit. Beat the clock!",
+}
+const BOSS_NAMES := {"golem": "The Rock Golem", "mummy": "The Mummy", "cobra": "The Giant Cobra"}
+const PRAISE := ["", "", "Good!", "Great!", "Amazing!", "Unstoppable!"]
 
 const THEMES := {
 	"sand": {"room": "sand", "room_tint": Color(1, 1, 1), "floor": 861.0, "grains": "sand", "gtint": Color(1, 1, 1), "glow": 0.0,
@@ -133,8 +133,14 @@ var tweens: Array = []
 var parts: Array = []
 var fx: Array = []
 
-var progress = {"best": [0, 0, 0, 0, 0, 0]}
-const SAVE_PATH := "user://progress.cfg"
+var meta = Meta.new()
+var level_t0 := 0.0
+var boosters_used := []
+var hammer_armed := false
+var tut_move := []
+var sand_top := 0
+var music: AudioStreamPlayer
+var music_key := ""
 
 # ---------- nodes ----------
 var bg_layer: Node2D
@@ -261,11 +267,17 @@ func _ready() -> void:
 	add_child(ui)
 	ui.build()
 
+	music = AudioStreamPlayer.new()
+	add_child(music)
 	get_viewport().size_changed.connect(_layout)
-	start_level(0)
-	state = "paused"
+	start_level(meta.current_level())
 	_layout()
-	ui.show_menu()
+	if autotest:
+		meta.lives = 99
+		meta.coins = 9999
+		for f in ["tut_swipe", "tip_boosters", "tip_boss"]:
+			meta.flags[f] = true
+	show_map()
 	if autotest:
 		_run_autotest()
 
@@ -311,14 +323,18 @@ func _load_textures() -> void:
 func _load_audio() -> void:
 	for n in ["pop0", "pop1", "pop2", "pop3", "pop4", "swap", "bad", "rocket", "boom", "zap",
 			"sand", "shine", "click", "win", "lose", "crack"]:
-		sfx[n] = load("res://assets/sfx/%s.wav" % n)
+		for ext in ["ogg", "mp3", "wav"]:
+			var sp := "res://assets/sfx/%s.%s" % [n, ext]
+			if ResourceLoader.exists(sp):
+				sfx[n] = load(sp)
+				break
 	for i in 10:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		players.append(p)
 
 func play(name: String, pitch := 1.0, db := 0.0) -> void:
-	if not sfx.has(name):
+	if not sfx.has(name) or not meta.settings.sound:
 		return
 	for p in players:
 		if not p.playing:
@@ -329,28 +345,18 @@ func play(name: String, pitch := 1.0, db := 0.0) -> void:
 			return
 
 func buzz(ms: int) -> void:
-	if OS.has_feature("mobile"):
+	if OS.has_feature("mobile") and meta.settings.vibration:
 		Input.vibrate_handheld(ms)
 
 func _load_progress() -> void:
-	var cf := ConfigFile.new()
-	if cf.load(SAVE_PATH) == OK:
-		var b = cf.get_value("progress", "best", [])
-		if b is Array:
-			for i in mini(b.size(), progress.best.size()):
-				progress.best[i] = int(b[i])
-
-func save_progress() -> void:
-	var cf := ConfigFile.new()
-	cf.set_value("progress", "best", progress.best)
-	cf.save(SAVE_PATH)
+	meta.setup(LEVELS.size())
 
 # ---------- layout ----------
 func _layout() -> void:
 	var vs = get_viewport_rect().size
 	var safe = _safe_insets()
 	var top: float = safe.x + Ui.HUD_H
-	var bottom = safe.y + 12.0
+	var bottom = safe.y + 12.0 + Ui.BAR_H
 	var avail_h: float = vs.y - top - bottom
 	var avail_w = vs.x - 20.0
 	g = maxf(2.0, minf(avail_w / SW, avail_h / SH))
@@ -477,7 +483,7 @@ func start_level(i: int) -> void:
 	_place_hero()
 	bg_layer.queue_redraw()
 	frame_layer.queue_redraw()
-	ui.set_level(i + 1, L.name, theme.ui)
+	ui.set_level(i + 1, ("BOSS · " + BOSS_NAMES[L.hazard]) if L.boss else L.name, theme.ui)
 	mode = L.get("mode", "drain")
 	wrapped.clear()
 	crust.clear()
@@ -498,8 +504,9 @@ func start_level(i: int) -> void:
 	_update_extra()
 	state = "paused"
 	last_input = time
-	var badge := "res://assets/gfx/badges/badge_%s.png" % mode
-	ui.show_intro(i + 1, L.name, MODES[mode].title, MODES[mode].text, load(badge) if ResourceLoader.exists(badge) else null)
+	sand_top = shaft.y0
+	hammer_armed = false
+	tut_move = []
 
 ## Gem areas too small to play in (cut off by debris) are filled with debris instead.
 func _fill_pockets() -> void:
@@ -1089,6 +1096,7 @@ func _resolve_clusters(cls: Array) -> void:
 			t_end = maxf(t_end, _pop_gem(grid[r][c]))
 		if kind != "":
 			made_special = true
+			_power_tip(kind)
 			if mode == "race":
 				time_left += RACE_BONUS
 				ui.toast("+%d seconds!" % int(RACE_BONUS))
@@ -1118,13 +1126,18 @@ func _resolve_clusters(cls: Array) -> void:
 	await wait(t_end)
 
 func cascade() -> void:
+	var waves := 0
 	for _guard in 30:
 		var cls = find_clusters()
 		if cls.is_empty():
 			break
+		waves += 1
 		await _resolve_clusters(cls)
 		last_swap = []
 		await collapse()
+	if waves >= 2 and state != "won":
+		ui.praise(PRAISE[mini(waves, PRAISE.size() - 1)])
+		play("shine", 1.0 + waves * 0.08, -6.0)
 
 func _scarab_target(c0: int, r0: int) -> int:
 	var best := -1
@@ -1381,6 +1394,7 @@ func try_swap(a: Vector2i, b: Vector2i) -> void:
 		B.ty = B.y
 		state = "idle"
 		return
+	_tutorial_swapped()
 	if mode != "race":
 		moves -= 1
 	_update_hud()
@@ -1429,8 +1443,8 @@ func end_turn() -> void:
 	state = "idle"
 	last_input = time
 
-func _shuffle() -> void:
-	ui.toast("No moves left. Shuffling!")
+func _shuffle(msg := "No moves left. Shuffling!") -> void:
+	ui.toast(msg)
 	var gems = []
 	for r in ROWS:
 		for c in COLS:
@@ -1452,6 +1466,16 @@ func _shuffle() -> void:
 func _win() -> void:
 	state = "won"
 	var gen := level_gen
+	hammer_armed = false
+	tut_move = []
+	ui.set_tip("")
+	var ratio: float = (time_left / float(L.time)) if mode == "race" else float(moves) / float(L.moves)
+	var win_stars: int = 3 if ratio >= 0.3 else (2 if ratio >= 0.12 else 1)
+	var moves_left: int = int(time_left) if mode == "race" else moves
+	var left_bonus: int = int(time_left / 5.0) if mode == "race" else moves
+	var fired := await _bonus_rockets(mini(left_bonus, 12), gen)
+	if gen != level_gen:
+		return
 	await _escape()
 	if gen != level_gen:
 		return
@@ -1485,17 +1509,63 @@ func _win() -> void:
 	await collapse()
 	if gen != level_gen:
 		return
-	var ratio = float(moves) / float(L.moves)
-	var stars = 3 if ratio >= 0.3 else (2 if ratio >= 0.12 else 1)
-	if stars > int(progress.best[level_idx]):
-		progress.best[level_idx] = stars
-		save_progress()
+	var stars := win_stars
+	var earned: int = 10 + stars * 5 + fired * 3 + (50 if L.boss else 0)
+	meta.earn(earned)
+	meta.log_event("level_end", {"level": level_idx + 1, "mode": mode, "result": "won", "moves_left": moves_left,
+		"stars": stars, "seconds": int(time - level_t0), "boosters": boosters_used}, self)
+	if stars > int(meta.best[level_idx]):
+		meta.best[level_idx] = stars
+		meta.save()
 	for k in 30:
 		later(k * 0.04, func(): sparkle(ox + randf() * SW * g, oy + randf() * BY * g, 3))
 	await wait(0.9)
 	if gen != level_gen:
 		return
-	ui.show_win(stars, moves, L.name, level_idx < LEVELS.size() - 1)
+	_music("map")
+	ui.show_win(stars, earned, L.boss, level_idx < LEVELS.size() - 1)
+
+## Royal-Match style finale: every move left turns into a rocket that fires across the board.
+func _bonus_rockets(count: int, gen: int) -> int:
+	if count <= 0:
+		return 0
+	ui.praise("Bonus!")
+	await wait(0.5)
+	var cells := []
+	for r in ROWS:
+		for c in COLS:
+			var m = grid[r][c]
+			if m != null and m.kind == "gem" and not m.dying and not wrapped.has(r * COLS + c):
+				cells.append(Vector2i(c, r))
+	cells.shuffle()
+	count = mini(count, cells.size())
+	var seeds := []
+	for k in count:
+		if gen != level_gen:
+			return 0
+		var cl: Vector2i = cells[k]
+		var m: Gem = grid[cl.y][cl.x]
+		m.kind = "rocket"
+		m.dir = "h" if randf() < 0.5 else "v"
+		m.color = -1
+		tween(m, {"scale": 1.25}, 0.08)
+		tween(m, {"scale": 1.0}, 0.12, "out", 0.08)
+		spr(tex.fx_combo_burst, cell_cx(cl.x), cell_cy(cl.y), CELL * g * 0.4, CELL * g * 1.6, 0.35)
+		play("shine", 1.0 + k * 0.05, -9.0)
+		if mode != "race":
+			moves = maxi(0, moves - 1)
+		else:
+			time_left = maxf(0.0, time_left - 5.0)
+		_update_hud()
+		await wait(0.1)
+	for k in count:
+		var cl: Vector2i = cells[k]
+		var m = grid[cl.y][cl.x]
+		if m != null and m.kind == "rocket":
+			seeds.append({"c": cl.x, "r": cl.y, "kind": "rocket", "dir": m.dir, "delay": k * 0.12, "src": m})
+	await detonate(seeds)
+	await collapse()
+	return count
 
 func _escape() -> void:
 	# the sand no longer holds the door: Zaki heaves it open and runs for the safe door
@@ -1546,10 +1616,15 @@ func _lose(timed_out := false) -> void:
 	if gen != level_gen:
 		return
 	var left = ceili(shaft_sand * 100.0 / shaft0) if shaft_sand > 0 else 0
-	ui.show_lose(left, not extra_used, "Time's up!" if timed_out else "Zaki got caught!")
+	meta.log_event("level_end", {"level": level_idx + 1, "mode": mode, "result": "lost", "moves_left": 0,
+		"sand_left": left, "seconds": int(time - level_t0), "boosters": boosters_used, "timed_out": timed_out}, self)
+	ui.show_lose(left, "Time's up!" if timed_out else "Zaki got caught!")
 
 func plus_five() -> void:
-	extra_used = true
+	if not meta.use_booster("moves5"):
+		ui.toast("Not enough coins")
+		return
+	boosters_used.append("moves5")
 	moves += 5
 	time_left += 25.0
 	hz_target = _danger_target()
@@ -1579,12 +1654,219 @@ func plus_five() -> void:
 	_update_hud()
 	last_input = time
 
+func show_map() -> void:
+	state = "map"
+	meta.tick_lives()
+	ui.show_map()
+	_music("map")
+
+func select_level(i: int) -> void:
+	meta.tick_lives()
+	if meta.lives <= 0:
+		ui.show_no_lives()
+		return
+	var lv: Dictionary = LEVELS[i]
+	var m: String = lv.mode
+	var first := not meta.seen("mode_" + m)
+	var badge := "res://assets/gfx/badges/badge_%s.png" % m
+	var text: String = MODES[m].text if first else MODE_SHORT[m]
+	if lv.boss:
+		text = BOSS_NAMES[lv.hazard] + " replaces the gate! " + text
+	ui.show_intro(i, lv.boss, MODES[m].title, text, load(badge) if ResourceLoader.exists(badge) else null)
+
+func begin_level(i: int, pre: Array) -> void:
+	meta.mark("mode_" + LEVELS[i].mode)
+	ui.hide_map()
+	ui.hide_overlay()
+	start_level(i)
+	boosters_used = pre.duplicate()
+	level_t0 = time
+	for key in pre:
+		_place_pre_booster(key)
+	state = "idle"
+	last_input = time
+	_music("boss" if L.boss else "level_" + L.theme)
+	meta.log_event("level_start", {"level": i + 1, "mode": mode, "boss": L.boss, "lives": meta.lives}, self)
+	_tutorial_start()
+
+func next_level() -> void:
+	select_level(mini(level_idx + 1, LEVELS.size() - 1))
+
+func retry_level() -> void:
+	select_level(level_idx)
+
+func give_up(to_map: bool) -> void:
+	meta.lose_life()
+	if to_map:
+		show_map()
+	else:
+		retry_level()
+
+func quit_level() -> void:
+	meta.log_event("level_end", {"level": level_idx + 1, "mode": mode, "result": "quit", "moves_left": moves,
+		"sand_left": hud_pct, "seconds": int(time - level_t0), "boosters": boosters_used}, self)
+	meta.lose_life()
+	show_map()
+
 func open_menu() -> void:
-	if state == "busy":
+	if state == "busy" or state == "map":
 		return
 	if state == "idle":
 		state = "paused"
-	ui.show_menu()
+	ui.show_pause()
+
+func _place_pre_booster(key: String) -> void:
+	var spots := []
+	for r in ROWS:
+		for c in COLS:
+			var m = grid[r][c]
+			if m != null and m.kind == "gem" and not wrapped.has(r * COLS + c):
+				spots.append([_near_rub(c, r) + randf() * 0.3, Vector2i(c, r)])
+	spots.sort_custom(func(a, b): return a[0] > b[0])
+	for sp in spots:
+		var cl: Vector2i = sp[1]
+		var m: Gem = grid[cl.y][cl.x]
+		if m.kind != "gem":
+			continue
+		m.kind = "rocket" if key == "pre_rocket" else "scarab"
+		m.dir = "h" if randf() < 0.5 else "v"
+		m.color = -1
+		later(0.3, func(): spr(tex.fx_combo_burst, cell_cx(cl.x), cell_cy(cl.y), CELL * g * 0.6, CELL * g * 2.2, 0.5))
+		return
+
+# ---------- in-level boosters ----------
+func use_booster(key: String) -> void:
+	if state != "idle":
+		return
+	if key == "hammer" and hammer_armed:
+		hammer_armed = false
+		ui.set_tip("")
+		ui.refresh_bar()
+		return
+	if not meta.use_booster(key):
+		ui.toast("Not enough coins")
+		play("bad", 1.0, -8.0)
+		return
+	boosters_used.append(key)
+	ui.refresh_bar()
+	match key:
+		"hammer":
+			hammer_armed = true
+			ui.set_tip("Tap a gem or a sand block to smash it.")
+			ui.refresh_bar()
+		"shuffle":
+			state = "busy"
+			await _shuffle("Shuffling the board!")
+			state = "idle"
+		"moves5":
+			if mode == "race":
+				time_left += 25.0
+				ui.toast("+25 seconds")
+			else:
+				moves += 5
+				time_left += 25.0
+				ui.toast("+5 moves")
+			hz_target = _danger_target()
+			hz_p = minf(hz_p, hz_target)
+			_update_hud()
+			play("shine", 1.0, -4.0)
+
+func _raw_cell(p: Vector2) -> Vector2i:
+	var c = int(floor((p.x - ox - BX * g) / (CELL * g)))
+	var r = int(floor((p.y - oy - BY * g) / (CELL * g)))
+	return Vector2i(c, r) if in_b(c, r) else Vector2i(-1, -1)
+
+func _hammer_at(cell: Vector2i) -> void:
+	hammer_armed = false
+	ui.refresh_bar()
+	ui.set_tip("")
+	state = "busy"
+	var id := cell.y * COLS + cell.x
+	spr(tex.fx_combo_burst, cell_cx(cell.x), cell_cy(cell.y), CELL * g * 0.6, CELL * g * 2.2, 0.4)
+	play("boom", 1.4, -6.0)
+	buzz(30)
+	shake = 0.15
+	if is_rub(cell.x, cell.y):
+		damage_rubble(id, true)
+		damage_rubble(id, true)
+		await wait(0.3)
+	else:
+		if wrapped.has(id):
+			_unwrap(id)
+		var m = grid[cell.y][cell.x]
+		if m != null:
+			var sd := {"c": cell.x, "r": cell.y, "kind": m.kind if m.kind != "gem" else "single", "dir": m.dir, "delay": 0.0, "src": m}
+			if m.kind == "light":
+				sd.color = most_common_color()
+			await detonate([sd])
+	await collapse()
+	await cascade()
+	shaft_sand = _count_shaft()
+	if goal_done():
+		_win()
+		return
+	state = "idle"
+	last_input = time
+
+# ---------- tutorial and tips ----------
+func _tutorial_start() -> void:
+	if level_idx == 0 and not meta.seen("tut_swipe"):
+		var ms := all_moves()
+		ms.sort_custom(func(a, b): return _near_rub(a[0].x, a[0].y) + _near_rub(a[1].x, a[1].y) > _near_rub(b[0].x, b[0].y) + _near_rub(b[1].x, b[1].y))
+		if not ms.is_empty():
+			tut_move = ms[0]
+			ui.set_tip("Swipe a gem to make a line of 3. Matches next to the sand break it and free Zaki's door!")
+	elif level_idx >= 4 and not meta.seen("tip_boosters"):
+		meta.mark("tip_boosters")
+		ui.set_tip("Stuck? Use a booster below: Hammer, Shuffle or +5 Moves.", 6.0)
+	elif L.boss and not meta.seen("tip_boss"):
+		meta.mark("tip_boss")
+		ui.set_tip("Boss level! The monster replaces the gate. Free the door before it reaches Zaki.", 6.0)
+
+func _tutorial_swapped() -> void:
+	if not tut_move.is_empty():
+		tut_move = []
+		meta.mark("tut_swipe")
+		ui.set_tip("Great! Keep going. When no sand is left against the door, Zaki escapes.", 5.0)
+
+const POWER_TIPS := {
+	"rocket": "Rocket! 4 in a line. Tap it or swap it to blast a whole row.",
+	"bomb": "Bomb! An L or T shape. It blasts everything around it.",
+	"light": "Rainbow orb! 5 in a line. Swap it with a gem to clear that colour.",
+	"scarab": "Scarab! A 2x2 square. It flies into the sand and hits it hard.",
+}
+
+func _power_tip(kind: String) -> void:
+	if POWER_TIPS.has(kind) and not meta.seen("tip_" + kind):
+		meta.mark("tip_" + kind)
+		ui.set_tip(POWER_TIPS[kind], 4.5)
+
+# ---------- music ----------
+func _music(key: String) -> void:
+	if key == music_key:
+		return
+	music_key = key
+	var cands := ["res://assets/music/%s.ogg" % key, "res://assets/music/%s.mp3" % key]
+	if key.begins_with("level_"):
+		cands += ["res://assets/music/level.ogg", "res://assets/music/level.mp3"]
+	var stream: AudioStream = null
+	for c in cands:
+		if ResourceLoader.exists(c):
+			stream = load(c)
+			break
+	if stream == null:
+		music.stop()
+		return
+	if stream is AudioStreamOggVorbis or stream is AudioStreamMP3:
+		stream.loop = true
+	music.stream = stream
+	music.volume_db = -8.0 if meta.settings.music else -80.0
+	music.play()
+
+func apply_settings() -> void:
+	meta.save()
+	if music:
+		music.volume_db = -8.0 if meta.settings.music else -80.0
 
 func resume() -> void:
 	ui.hide_overlay()
@@ -1592,7 +1874,7 @@ func resume() -> void:
 	last_input = time
 
 func level_unlocked(i: int) -> bool:
-	return i == 0 or int(progress.best[i - 1]) > 0
+	return meta.unlocked(i)
 
 # ---------- input ----------
 var down_cell := Vector2i(-1, -1)
@@ -1619,6 +1901,11 @@ func _pointer(pressed: bool, pos: Vector2) -> void:
 		last_input = time
 		hint = []
 		if state != "idle":
+			return
+		if hammer_armed:
+			var hc := _raw_cell(pos)
+			if hc.x >= 0:
+				_hammer_at(hc)
 			return
 		var cell = _cell_at(pos)
 		if cell.x < 0:
@@ -1663,7 +1950,8 @@ func _sand_step() -> int:
 	var moved := 0
 	flip ^= 1
 	var w = ax1 - ax0
-	for y in range(ay1 - 1, ay0 - 1, -1):
+	var top_found := SH
+	for y in range(ay1 - 1, maxi(ay0, sand_top - 1) - 1, -1):
 		var base: int = y * SW
 		var ltr = ((y + flip) & 1) == 1
 		for k in w:
@@ -1672,6 +1960,8 @@ func _sand_step() -> int:
 			var v = sand[i]
 			if v == 0:
 				continue
+			if y < top_found:
+				top_found = y
 			var b: int = i + SW
 			if mask[b] == 1 and sand[b] == 0:
 				sand[b] = v
@@ -1689,6 +1979,7 @@ func _sand_step() -> int:
 						moved += 1
 						break
 				d = -d
+	sand_top = top_found
 	return moved
 
 func _upload_sand() -> void:
@@ -1703,6 +1994,10 @@ func _upload_sand() -> void:
 func _process(dt: float) -> void:
 	dt = minf(dt, 0.033)
 	time += dt
+	if music and music.playing and (state == "idle" or state == "busy"):
+		music.pitch_scale = lerpf(music.pitch_scale, 1.0 + hz_p * 0.06, minf(1.0, dt * 2.0))
+	elif music:
+		music.pitch_scale = lerpf(music.pitch_scale, 1.0, minf(1.0, dt * 2.0))
 	# tweens
 	var i = tweens.size() - 1
 	while i >= 0:
@@ -1743,7 +2038,8 @@ func _process(dt: float) -> void:
 		sand_acc += dt * 55.0
 		var mv := 0
 		var steps := 0
-		while sand_acc >= 1.0 and steps < 3:
+		var max_steps: int = 3 if Engine.get_frames_per_second() >= 45 else 2
+		while sand_acc >= 1.0 and steps < max_steps:
 			if not sand_sleep:
 				var n = _sand_step()
 				mv += n
@@ -2495,6 +2791,22 @@ func _draw_crust(ci: CanvasItem) -> void:
 func _draw_fx(ci: CanvasItem) -> void:
 	if mode == "crust":
 		_draw_crust(ci)
+	if not tut_move.is_empty() and state == "idle":
+		var a: Vector2i = tut_move[0]
+		var b: Vector2i = tut_move[1]
+		var pa := Vector2(cell_cx(a.x), cell_cy(a.y))
+		var pb := Vector2(cell_cx(b.x), cell_cy(b.y))
+		var ph := fmod(time * 0.8, 1.0)
+		var e := clampf((ph - 0.15) / 0.55, 0.0, 1.0)
+		e = e * e * (3.0 - 2.0 * e)
+		var hp := pa.lerp(pb, e)
+		var al := 1.0 - clampf((ph - 0.8) / 0.2, 0.0, 1.0)
+		for cpos in [pa, pb]:
+			ci.draw_arc(cpos, CELL * g * 0.5, 0, TAU, 32, Color(1, 0.95, 0.6, 0.55 + 0.3 * sin(time * 6.0)), maxf(2.0, g * 0.45), true)
+		ci.draw_line(pa, pb, Color(1, 1, 1, 0.35), maxf(2.0, g * 0.5))
+		ci.draw_circle(hp + Vector2(g * 0.6, g * 0.8), CELL * g * 0.3, Color(0, 0, 0, 0.25 * al))
+		ci.draw_circle(hp, CELL * g * 0.3, Color(1, 1, 1, 0.9 * al))
+		ci.draw_arc(hp, CELL * g * 0.3 + (1.0 - al) * g * 3.0, 0, TAU, 32, Color(1, 0.85, 0.3, al), maxf(2.0, g * 0.4), true)
 	var S = CELL * g * 0.8
 	for f in fx:
 		var p: float = f.life / f.max
@@ -2639,11 +2951,13 @@ func _bot_move() -> void:
 	await try_swap(ms[0][0], ms[0][1])
 
 func _run_autotest() -> void:
-	await wait(1.0)
-	await _shot("01_menu")
-	for lv in LEVELS.size():
-		start_level(lv)
-		resume()
+	await wait(1.2)
+	await _shot("01_map")
+	select_level(0)
+	await wait(0.8)
+	await _shot("02_intro")
+	for lv in [0, 1, 4, 9, 12, 19, 33, 45, 54, 59]:
+		begin_level(lv, ["pre_rocket"] if lv == 12 else [])
 		await wait(1.5)
 		await _shot("L%d_a_start" % (lv + 1))
 		var n := 0
@@ -2651,22 +2965,25 @@ func _run_autotest() -> void:
 			if state == "idle":
 				await _bot_move()
 				n += 1
-				if n == 10:
+				if n == 6:
 					await wait(1.2)
 					await _shot("L%d_b_chase" % (lv + 1))
 			else:
 				await wait(0.1)
 		if state == "won":
-			await wait(1.9)
-			await _shot("L%d_c_escape" % (lv + 1))
+			await wait(1.4)
+			await _shot("L%d_c_bonus" % (lv + 1))
 		else:
 			await wait(1.0)
 			await _shot("L%d_c_caught" % (lv + 1))
 		var w := 0
-		while not ui.overlay.visible and w < 120:
+		while not ui.overlay.visible and w < 160:
 			await wait(0.1)
 			w += 1
 		await wait(0.5)
-		print("AUTOTEST RESULT level=%d state=%s moves_left=%d debris=%d" % [lv + 1, state, moves, grains])
+		print("AUTOTEST RESULT level=%d mode=%s boss=%s state=%s moves_left=%d" % [lv + 1, mode, L.boss, state, moves])
 		await _shot("L%d_d_end" % (lv + 1))
+	show_map()
+	await wait(1.0)
+	await _shot("99_map")
 	get_tree().quit()

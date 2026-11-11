@@ -2,6 +2,8 @@ extends CanvasLayer
 ## HUD, toasts, level select and win/lose cards. All built in code.
 
 const HUD_H := 132.0
+const BAR_H := 118.0
+const MapView := preload("res://scripts/map.gd")
 const GOLD := Color("f5c542")
 const GOLD_DEEP := Color("b9821c")
 const INK := Color("fff3dc")
@@ -35,6 +37,26 @@ var center: CenterContainer
 var card: PanelContainer
 var card_box: VBoxContainer
 var vsize := Vector2(720, 1280)
+var bar: Control
+var bar_btns := {}
+var tip_panel: PanelContainer
+var tip_label: Label
+var tip_tw: Tween
+var praise_label: Label
+var map_layer: Control
+var map_view: Control
+var top_bar: Control
+var coins_icon: Control
+var coins_label: Label
+var lives_icon: Control
+var lives_label: Label
+var lives_timer: Label
+var gear_btn: Button
+var play_btn: Button
+var pre_sel := {}
+var pre_btns := {}
+var nolives_timer: Label
+var sec_t := 0.0
 
 class Ring extends Control:
 	var p := 100.0
@@ -104,6 +126,111 @@ class LevelTile extends Button:
 			var lc := Vector2(w - 34, 30)
 			draw_rect(Rect2(lc - Vector2(11, 2), Vector2(22, 18)), Color(0.79, 0.73, 0.64, 0.8))
 			draw_arc(lc + Vector2(0, -2), 8, PI, TAU, 12, Color(0.79, 0.73, 0.64, 0.8), 4.0)
+
+class CoinIcon extends Control:
+	func _draw() -> void:
+		var c := size / 2.0
+		var r := minf(size.x, size.y) / 2.0
+		draw_circle(c + Vector2(0, 2), r, Color("9a6410"))
+		draw_circle(c, r, Color("f5c542"))
+		draw_circle(c, r * 0.68, Color("e0a82a"))
+		draw_arc(c, r * 0.68, 0, TAU, 24, Color("fff0a8"), 2.0, true)
+		draw_circle(c + Vector2(-r * 0.3, -r * 0.3), r * 0.18, Color(1, 1, 1, 0.6))
+
+class HeartIcon extends Control:
+	func _draw() -> void:
+		var c := size / 2.0
+		var r := minf(size.x, size.y) / 2.0
+		var pts := PackedVector2Array()
+		for k in 40:
+			var t := TAU * k / 40.0
+			var x := 16.0 * pow(sin(t), 3)
+			var y := -(13.0 * cos(t) - 5.0 * cos(2 * t) - 2.0 * cos(3 * t) - cos(4 * t))
+			pts.append(c + Vector2(x, y) * r / 17.0)
+		draw_colored_polygon(pts, Color("e0344a"))
+		draw_circle(c + Vector2(-r * 0.35, -r * 0.3), r * 0.18, Color(1, 1, 1, 0.5))
+
+class BoosterBtn extends Button:
+	var key := ""
+	var count := 0
+	var price := 0
+	var armed := false
+	var f: Font
+	func _draw() -> void:
+		var c := Vector2(size.x / 2.0, size.y / 2.0 - 6.0)
+		var r := minf(size.x, size.y) / 2.0 - 10.0
+		draw_circle(c + Vector2(0, 4), r, Color(0, 0, 0, 0.3))
+		draw_circle(c, r, Color("f5c542") if armed else Color("3a2d66"))
+		draw_arc(c, r, 0, TAU, 40, Color("b9821c"), 4.0, true)
+		match key:
+			"hammer", "pre_rocket_unused":
+				draw_set_transform(c, -0.7, Vector2.ONE)
+				draw_rect(Rect2(-r * 0.09, -r * 0.2, r * 0.18, r * 0.85), Color("8a5a2b"))
+				draw_rect(Rect2(-r * 0.42, -r * 0.55, r * 0.84, r * 0.36), Color("c9ccd4"))
+				draw_rect(Rect2(-r * 0.42, -r * 0.55, r * 0.84, r * 0.1), Color("eef0f5"))
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			"shuffle":
+				for k in 2:
+					var a0 := -0.3 + k * PI
+					draw_arc(c, r * 0.45, a0, a0 + 2.4, 18, Color("2fc4b2"), r * 0.14, true)
+					var tip := c + Vector2.from_angle(a0 + 2.4) * r * 0.45
+					var dir := Vector2.from_angle(a0 + 2.4 + PI / 2.0)
+					var side := dir.orthogonal()
+					draw_colored_polygon(PackedVector2Array([tip + dir * r * 0.22, tip + side * r * 0.18, tip - side * r * 0.18]), Color("2fc4b2"))
+			"moves5":
+				var tx := "+5"
+				var fs := int(r * 0.9)
+				var tw := f.get_string_size(tx, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				draw_string(f, Vector2(c.x - tw / 2.0, c.y + fs * 0.35), tx, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("fff3dc"))
+		# count or price tag
+		var tag: String = ("x%d" % count) if count > 0 else str(price)
+		var tf := 22
+		var tw2: float = f.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tf).x + (26.0 if count <= 0 else 0.0)
+		var tr := Rect2(Vector2(c.x - tw2 / 2.0 - 10.0, size.y - 30.0), Vector2(tw2 + 20.0, 28.0))
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color("2fbf7a") if count > 0 else Color("231a3a")
+		sb.border_color = Color("b9821c")
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(14)
+		draw_style_box(sb, tr)
+		var x0 := tr.position.x + 10.0
+		if count <= 0:
+			draw_circle(Vector2(x0 + 10.0, tr.position.y + 14.0), 9.0, Color("f5c542"))
+			x0 += 26.0
+		draw_string(f, Vector2(x0, tr.position.y + 22.0), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tf, Color("fff3dc"))
+
+class PreBtn extends Button:
+	var key := ""
+	var on := false
+	var count := 0
+	var price := 0
+	var icon_tex: Texture2D
+	var f: Font
+	func _draw() -> void:
+		var r := Rect2(Vector2(4, 4), size - Vector2(8, 8))
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color("3d2f6b") if not on else Color("1f6b5f")
+		sb.border_color = Color("2fc4b2") if on else Color("54438a")
+		sb.set_border_width_all(4)
+		sb.set_corner_radius_all(22)
+		draw_style_box(sb, r)
+		var s := size.y - 46.0
+		draw_texture_rect(icon_tex, Rect2(Vector2((size.x - s) / 2.0, 10.0), Vector2(s, s)), false)
+		var tag: String = "ON" if on else (("x%d" % count) if count > 0 else "%d coins" % price)
+		var tw := f.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
+		draw_string(f, Vector2((size.x - tw) / 2.0, size.y - 14.0), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color("fff3dc"))
+
+class GearBtn extends Button:
+	func _draw() -> void:
+		var c := size / 2.0
+		var col := Color("f5c542")
+		for k in 8:
+			var a := TAU * k / 8.0
+			draw_set_transform(c, a, Vector2.ONE)
+			draw_rect(Rect2(-6, -24, 12, 10), col)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		draw_circle(c, 17.0, col)
+		draw_circle(c, 7.0, Color("2b2050"))
 
 class MenuIcon extends Button:
 	func _draw() -> void:
@@ -181,6 +308,41 @@ func build() -> void:
 	pct_label = _label("100%", font_display, 34, INK)
 	hud.add_child(pct_label)
 
+	# ----- booster bar -----
+	bar = Control.new()
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(bar)
+	for key in ["hammer", "shuffle", "moves5"]:
+		var b := BoosterBtn.new()
+		b.key = key
+		b.f = font_display
+		b.custom_minimum_size = Vector2(104, 108)
+		var e := StyleBoxEmpty.new()
+		for st in ["normal", "hover", "pressed", "focus", "disabled"]:
+			b.add_theme_stylebox_override(st, e)
+		var k2: String = key
+		b.pressed.connect(func():
+			game.play("click")
+			game.use_booster(k2))
+		bar.add_child(b)
+		bar_btns[key] = b
+
+	# ----- tip and praise -----
+	tip_panel = PanelContainer.new()
+	tip_panel.add_theme_stylebox_override("panel", _box(Color(0.08, 0.06, 0.14, 0.94), Color("2fc4b2"), 22, 3, 18))
+	tip_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tip_label = _label("", font_black, 26, INK)
+	tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tip_panel.add_child(tip_label)
+	tip_panel.visible = false
+	root.add_child(tip_panel)
+	praise_label = _label("", font_display, 92, GOLD)
+	_heading(praise_label)
+	praise_label.add_theme_constant_override("outline_size", 14)
+	praise_label.modulate.a = 0.0
+	root.add_child(praise_label)
+
 	# ----- toast -----
 	toast_panel = PanelContainer.new()
 	toast_panel.add_theme_stylebox_override("panel", _box(Color(0.08, 0.06, 0.14, 0.92), GOLD_DEEP, 24, 4, 22))
@@ -191,6 +353,51 @@ func build() -> void:
 	toast_panel.add_child(toast_label)
 	toast_panel.modulate.a = 0.0
 	root.add_child(toast_panel)
+
+	# ----- journey map -----
+	map_layer = Control.new()
+	map_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	map_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(map_layer)
+	map_view = MapView.new()
+	map_view.game = game
+	map_view.ui = self
+	map_view.f_display = font_display
+	map_view.f_body = font_body
+	map_view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	map_layer.add_child(map_view)
+	map_view.setup()
+	top_bar = PanelContainer.new()
+	top_bar.add_theme_stylebox_override("panel", _box(Color(0.1, 0.07, 0.18, 0.9), GOLD_DEEP, 0, 0))
+	top_bar.mouse_filter = Control.MOUSE_FILTER_STOP
+	map_layer.add_child(top_bar)
+	lives_icon = HeartIcon.new()
+	coins_icon = CoinIcon.new()
+	lives_label = _label("5", font_display, 40, INK)
+	lives_timer = _label("Full", font_body, 22, INK_SOFT)
+	coins_label = _label("300", font_display, 40, INK)
+	for n in [lives_icon, lives_label, lives_timer, coins_icon, coins_label]:
+		map_layer.add_child(n)
+	gear_btn = GearBtn.new()
+	_style_button(gear_btn, PANEL_2, GOLD_DEEP, 20)
+	gear_btn.pressed.connect(func():
+		game.play("click")
+		show_settings())
+	map_layer.add_child(gear_btn)
+	play_btn = _button("Play", "gold")
+	play_btn.add_theme_font_size_override("font_size", 50)
+	play_btn.pressed.connect(func():
+		game.play("click")
+		game.select_level(game.meta.current_level()))
+	map_layer.add_child(play_btn)
+	var logo := TextureRect.new()
+	logo.name = "MapLogo"
+	logo.texture = load("res://assets/gfx/ui/logo.png")
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	map_layer.add_child(logo)
+	map_layer.visible = false
 
 	# ----- overlay -----
 	overlay = Control.new()
@@ -243,6 +450,42 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	toast_panel.size = Vector2(tw, 0)
 	toast_panel.position = Vector2((vs.x - tw) / 2.0, vs.y * 0.42)
 	card.custom_minimum_size = Vector2(minf(vs.x - 48.0, 620.0), 0)
+	var bottom := vs.y - safe.y - BAR_H - 6.0
+	bar.position = Vector2(0, bottom)
+	bar.size = Vector2(vs.x, BAR_H)
+	var keys := ["hammer", "shuffle", "moves5"]
+	for k in keys.size():
+		var b: Control = bar_btns[keys[k]]
+		b.size = Vector2(104, 108)
+		b.position = Vector2(vs.x / 2.0 + (k - 1) * 150.0 - 52.0, 4.0)
+	var tpw := minf(vs.x - 40.0, 640.0)
+	tip_panel.custom_minimum_size = Vector2(tpw, 0)
+	tip_panel.size = Vector2(tpw, 0)
+	tip_panel.position = Vector2((vs.x - tpw) / 2.0, bottom - 150.0)
+	praise_label.size = Vector2(vs.x, 120)
+	praise_label.position = Vector2(0, vs.y * 0.36)
+	praise_label.pivot_offset = praise_label.size / 2.0
+	# map
+	var mt := safe.x
+	top_bar.position = Vector2(0, 0)
+	top_bar.size = Vector2(vs.x, mt + 104.0)
+	lives_icon.position = Vector2(26, mt + 26)
+	lives_icon.size = Vector2(56, 52)
+	lives_label.position = Vector2(92, mt + 16)
+	lives_timer.position = Vector2(94, mt + 62)
+	coins_icon.position = Vector2(vs.x * 0.5 - 40.0, mt + 28)
+	coins_icon.size = Vector2(48, 48)
+	coins_label.position = Vector2(vs.x * 0.5 + 18.0, mt + 20)
+	gear_btn.position = Vector2(vs.x - 100.0, mt + 14)
+	gear_btn.size = Vector2(78, 78)
+	var pw := minf(vs.x - 120.0, 460.0)
+	play_btn.position = Vector2((vs.x - pw) / 2.0, vs.y - safe.y - 150.0)
+	play_btn.size = Vector2(pw, 112)
+	var lg: Control = map_layer.get_node("MapLogo")
+	lg.position = Vector2(vs.x * 0.15, mt + 110.0)
+	lg.size = Vector2(vs.x * 0.7, vs.x * 0.7 * 0.42)
+	map_view.top_pad = mt + 110.0 + vs.x * 0.3
+	map_view.bottom_pad = safe.y + 220.0
 
 func set_level(n: int, title: String, col: Color) -> void:
 	lvl_label.text = "Level %d" % n
@@ -257,6 +500,83 @@ func update_time(sec: int) -> void:
 func set_extra(text: String) -> void:
 	extra_icon.visible = text.begins_with("Bandages")
 	extra_label.text = text.replace("Bandages ", "") if extra_icon.visible else text
+
+func refresh_bar() -> void:
+	for k in bar_btns:
+		var b: BoosterBtn = bar_btns[k]
+		b.count = int(game.meta.boosters.get(k, 0))
+		b.price = int(game.meta.PRICES[k])
+		b.armed = (k == "hammer" and game.hammer_armed)
+		b.queue_redraw()
+
+func set_tip(text: String, hold := 0.0) -> void:
+	if tip_tw:
+		tip_tw.kill()
+	if text == "":
+		tip_panel.visible = false
+		return
+	tip_label.text = text
+	tip_panel.visible = true
+	tip_panel.reset_size()
+	tip_panel.position.x = (vsize.x - tip_panel.size.x) / 2.0
+	tip_panel.modulate.a = 0.0
+	tip_tw = create_tween()
+	tip_tw.tween_property(tip_panel, "modulate:a", 1.0, 0.25)
+	if hold > 0.0:
+		tip_tw.tween_interval(hold)
+		tip_tw.tween_property(tip_panel, "modulate:a", 0.0, 0.4)
+		tip_tw.tween_callback(func(): tip_panel.visible = false)
+
+func praise(text: String) -> void:
+	praise_label.text = text
+	praise_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	praise_label.scale = Vector2(0.4, 0.4)
+	praise_label.modulate.a = 1.0
+	var t := create_tween()
+	t.tween_property(praise_label, "scale", Vector2(1.1, 1.1), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.tween_property(praise_label, "scale", Vector2.ONE, 0.1)
+	t.tween_interval(0.55)
+	t.tween_property(praise_label, "modulate:a", 0.0, 0.35)
+
+func _process(dt: float) -> void:
+	sec_t += dt
+	if sec_t < 0.5:
+		return
+	sec_t = 0.0
+	if map_layer.visible:
+		_refresh_top()
+	if nolives_timer and is_instance_valid(nolives_timer):
+		game.meta.tick_lives()
+		var sl: int = game.meta.seconds_to_next_life()
+		nolives_timer.text = "Next life in %d:%02d" % [sl / 60, sl % 60]
+		if game.meta.lives > 0:
+			nolives_timer = null
+			hide_overlay()
+			game.show_map()
+
+func _refresh_top() -> void:
+	game.meta.tick_lives()
+	lives_label.text = str(game.meta.lives)
+	var sl: int = game.meta.seconds_to_next_life()
+	lives_timer.text = "Full" if game.meta.lives >= game.meta.MAX_LIVES else "%d:%02d" % [sl / 60, sl % 60]
+	coins_label.text = str(game.meta.coins)
+	play_btn.text = "Level %d" % (game.meta.current_level() + 1)
+
+func show_map() -> void:
+	hide_overlay()
+	set_tip("")
+	hud.visible = false
+	bar.visible = false
+	map_layer.visible = true
+	_refresh_top()
+	await get_tree().process_frame
+	map_view.scroll_to(game.meta.current_level())
+
+func hide_map() -> void:
+	map_layer.visible = false
+	hud.visible = true
+	bar.visible = true
+	refresh_bar()
 
 func update_hud(moves: int, pct: int) -> void:
 	moves_label.text = "∞" if moves > 999 else str(maxi(0, moves))
@@ -295,84 +615,198 @@ func _show_card() -> void:
 func hide_overlay() -> void:
 	overlay.visible = false
 
-func show_menu() -> void:
+func _toggle_row(items: Array) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 18)
+	for it in items:
+		row.add_child(it)
+	return row
+
+func _setting_btn(key: String, label: String) -> Button:
+	var on: bool = game.meta.settings[key]
+	var b = _button("%s: %s" % [label, "On" if on else "Off"], "teal" if on else "dark")
+	b.add_theme_font_size_override("font_size", 34)
+	b.custom_minimum_size = Vector2(0, 78)
+	b.pressed.connect(func():
+		game.meta.settings[key] = not game.meta.settings[key]
+		game.apply_settings()
+		game.play("click")
+		var on2: bool = game.meta.settings[key]
+		b.text = "%s: %s" % [label, "On" if on2 else "Off"])
+	return b
+
+func show_pause() -> void:
 	_clear_card()
-	var logo := TextureRect.new()
-	logo.texture = load("res://assets/gfx/ui/logo.png")
-	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	logo.custom_minimum_size = Vector2(card.custom_minimum_size.x - 120, (card.custom_minimum_size.x - 120) * 0.56)
-	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card_box.add_child(logo)
-	var d = _label("Zaki is holding the door shut. Match gems beside the debris to drain it before your moves run out.", font_body, 28, INK_SOFT)
-	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	d.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
-	card_box.add_child(d)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 18)
-	grid.add_theme_constant_override("v_separation", 18)
-	var tile_w = (card.custom_minimum_size.x - 68 - 18) / 2.0
-	for i in game.LEVELS.size():
-		var lt := LevelTile.new()
-		lt.idx = i
-		lt.title = game.LEVELS[i].name
-		lt.stars = int(game.progress.best[i])
-		lt.swatch = game.THEMES[game.LEVELS[i].theme].ui
-		lt.locked = not game.level_unlocked(i)
-		lt.disabled = lt.locked
-		lt.f_display = font_display
-		lt.f_body = font_body
-		lt.custom_minimum_size = Vector2(tile_w, 184)
-		_style_button(lt, Color("3a2d66"), Color("54438a"), 26)
-		var li: int = i
-		lt.pressed.connect(func():
-			game.play("click")
-			game.start_level(li))
-		grid.add_child(lt)
-	card_box.add_child(grid)
-	if game.state == "paused":
-		var b = _button("Back to game", "ghost")
-		b.pressed.connect(func():
-			game.play("click")
-			game.resume())
-		card_box.add_child(b)
+	var t = _label("Paused", font_display, 66, GOLD)
+	_heading(t)
+	card_box.add_child(t)
+	var r = _button("Resume", "gold")
+	r.pressed.connect(func():
+		game.play("click")
+		game.resume())
+	card_box.add_child(r)
+	for k in [["music", "Music"], ["sound", "Sound"], ["vibration", "Vibration"]]:
+		card_box.add_child(_setting_btn(k[0], k[1]))
+	var q = _button("Leave level (lose a life)", "ghost")
+	q.pressed.connect(func():
+		game.play("click")
+		game.quit_level())
+	card_box.add_child(q)
 	_show_card()
 
-func show_intro(n: int, title: String, mode_title: String, text: String, badge: Texture2D = null) -> void:
+func show_settings() -> void:
+	_clear_card()
+	var t = _label("Settings", font_display, 66, GOLD)
+	_heading(t)
+	card_box.add_child(t)
+	for k in [["music", "Music"], ["sound", "Sound"], ["vibration", "Vibration"]]:
+		card_box.add_child(_setting_btn(k[0], k[1]))
+	var st = _button("Play stats", "teal")
+	st.pressed.connect(func():
+		game.play("click")
+		show_stats())
+	card_box.add_child(st)
+	var c = _button("Close", "ghost")
+	c.pressed.connect(func():
+		game.play("click")
+		hide_overlay())
+	card_box.add_child(c)
+	_show_card()
+
+func show_stats() -> void:
+	_clear_card()
+	var t = _label("Play stats", font_display, 60, GOLD)
+	_heading(t)
+	card_box.add_child(t)
+	var sm: Dictionary = game.meta.log_summary()
+	var keys := sm.keys()
+	keys.sort()
+	var lines := []
+	for k in keys.slice(maxi(0, keys.size() - 10)):
+		lines.append("Level %d:  %d won, %d lost" % [k, sm[k].win, sm[k].lose])
+	if lines.is_empty():
+		lines.append("No levels played yet.")
+	var d = _label("\n".join(lines), font_body, 28, INK)
+	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_box.add_child(d)
+	var n = _label("Every level you play is saved on this phone for testing.", font_body, 22, INK_SOFT)
+	n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	n.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
+	card_box.add_child(n)
+	var c = _button("Back", "ghost")
+	c.pressed.connect(func():
+		game.play("click")
+		show_settings())
+	card_box.add_child(c)
+	_show_card()
+
+func show_no_lives() -> void:
+	_clear_card()
+	var h := HeartIcon.new()
+	h.custom_minimum_size = Vector2(0, 110)
+	card_box.add_child(h)
+	var t = _label("Out of lives", font_display, 64, GOLD)
+	_heading(t)
+	card_box.add_child(t)
+	nolives_timer = _label("", font_body, 32, INK)
+	nolives_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_box.add_child(nolives_timer)
+	var price: int = game.meta.PRICES.refill
+	var rf = _button("Refill lives · %d coins" % price, "gold")
+	rf.disabled = game.meta.coins < price
+	rf.pressed.connect(func():
+		if game.meta.refill_lives():
+			game.play("shine")
+			nolives_timer = null
+			game.show_map())
+	card_box.add_child(rf)
+	var c = _button("Back to map", "ghost")
+	c.pressed.connect(func():
+		game.play("click")
+		nolives_timer = null
+		hide_overlay())
+	card_box.add_child(c)
+	_show_card()
+
+func show_intro(idx: int, boss: bool, mode_title: String, text: String, badge: Texture2D = null) -> void:
 	_clear_card()
 	if badge != null:
 		var b0 := TextureRect.new()
 		b0.texture = badge
 		b0.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		b0.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		b0.custom_minimum_size = Vector2(0, 230)
+		b0.custom_minimum_size = Vector2(0, 200)
 		b0.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card_box.add_child(b0)
-	var lv = _label("Level %d · %s" % [n, title], font_body, 30, INK_SOFT)
+	var lv = _label(("BOSS · Level %d" if boss else "Level %d") % (idx + 1), font_display, 40, Color("ff8f6b") if boss else INK_SOFT)
 	lv.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card_box.add_child(lv)
-	var t = _label(mode_title, font_display, 66, GOLD)
+	var t = _label(mode_title, font_display, 60, GOLD)
 	_heading(t)
 	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	t.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
 	card_box.add_child(t)
-	var d = _label(text, font_body, 30, INK)
+	var d = _label(text, font_body, 28, INK)
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
 	card_box.add_child(d)
+	# start-of-level boosters
+	var sub = _label("Start with a booster", font_body, 24, INK_SOFT)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_box.add_child(sub)
+	pre_sel.clear()
+	pre_btns.clear()
+	var items := []
+	for key in ["pre_rocket", "pre_scarab"]:
+		var pb := PreBtn.new()
+		pb.key = key
+		pb.f = font_display
+		pb.icon_tex = game.tex.rocket if key == "pre_rocket" else game.tex.scarab
+		pb.count = int(game.meta.boosters.get(key, 0))
+		pb.price = int(game.meta.PRICES[key])
+		pb.custom_minimum_size = Vector2(170, 150)
+		var e := StyleBoxEmpty.new()
+		for st in ["normal", "hover", "pressed", "focus"]:
+			pb.add_theme_stylebox_override(st, e)
+		var k2: String = key
+		pb.pressed.connect(func():
+			if pre_sel.has(k2):
+				pre_sel.erase(k2)
+			elif game.meta.can_use(k2):
+				pre_sel[k2] = true
+			else:
+				toast("Not enough coins")
+			pb.on = pre_sel.has(k2)
+			pb.queue_redraw()
+			game.play("click"))
+		pre_btns[key] = pb
+		items.append(pb)
+	card_box.add_child(_toggle_row(items))
 	var b = _button("Play", "gold")
 	b.pressed.connect(func():
 		game.play("click")
-		game.resume())
+		var used := []
+		for k in pre_sel:
+			if game.meta.use_booster(k):
+				used.append(k)
+		game.begin_level(idx, used))
 	card_box.add_child(b)
+	var c = _button("Back", "ghost")
+	c.pressed.connect(func():
+		game.play("click")
+		if game.state == "map":
+			hide_overlay()
+		else:
+			game.show_map())
+	card_box.add_child(c)
 	_show_card()
 
-func show_win(stars: int, moves: int, title: String, has_next: bool) -> void:
+func show_win(stars: int, coins: int, boss: bool, has_next: bool) -> void:
 	_clear_card()
-	var t = _label("Zaki is safe!", font_display, 66, GOLD)
+	var t = _label("Boss beaten!" if boss else "Zaki escaped!", font_display, 66, GOLD)
 	_heading(t)
 	card_box.add_child(t)
 	var st := Stars.new()
@@ -387,35 +821,30 @@ func show_win(stars: int, moves: int, title: String, has_next: bool) -> void:
 			st.n = k + 1
 			st.queue_redraw()
 			game.play("shine", 1.0 + k * 0.15, -4.0))
-	var d = _label("%d move%s to spare in %s." % [moves, "" if moves == 1 else "s", title], font_body, 30, INK_SOFT)
-	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	card_box.add_child(d)
+	var ci := CoinIcon.new()
+	ci.custom_minimum_size = Vector2(54, 54)
+	var cl = _label("+%d" % coins, font_display, 52, GOLD)
+	card_box.add_child(_toggle_row([ci, cl]))
 	if has_next:
 		var nb = _button("Next level", "gold")
 		nb.pressed.connect(func():
 			game.play("click")
-			game.start_level(game.level_idx + 1))
+			game.next_level())
 		card_box.add_child(nb)
 	else:
-		var e = _label("You cleared every chamber. More levels are on the way.", font_body, 28, INK_SOFT)
+		var e = _label("You reached the end of the Nile! More worlds are on the way.", font_body, 28, INK_SOFT)
 		e.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		e.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
 		card_box.add_child(e)
-	var ab = _button("Play again", "teal")
-	ab.pressed.connect(func():
-		game.play("click")
-		game.start_level(game.level_idx))
-	card_box.add_child(ab)
-	var lb = _button("All levels", "ghost")
+	var lb = _button("Map", "ghost")
 	lb.pressed.connect(func():
 		game.play("click")
-		game.state = "menu"
-		show_menu())
+		game.show_map())
 	card_box.add_child(lb)
 	_show_card()
 
-func show_lose(left: int, can_extra: bool, title := "Zaki got caught!") -> void:
+func show_lose(left: int, title := "Zaki got caught!") -> void:
 	_clear_card()
 	var t = _label(title, font_display, 62, GOLD)
 	_heading(t)
@@ -423,22 +852,28 @@ func show_lose(left: int, can_extra: bool, title := "Zaki got caught!") -> void:
 	var d = _label("%d%% of the sand was still blocking the door." % left, font_body, 30, INK_SOFT)
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card_box.add_child(d)
-	if can_extra:
-		var mb = _button("+5 moves, +25 s", "gold")
-		mb.pressed.connect(func():
-			game.play("click")
-			game.plus_five())
-		card_box.add_child(mb)
+	var have := int(game.meta.boosters.get("moves5", 0))
+	var price: int = game.meta.PRICES.moves5
+	var mb = _button(("+5 moves, +25 s  (x%d)" % have) if have > 0 else "+5 moves, +25 s  · %d coins" % price, "gold")
+	mb.add_theme_font_size_override("font_size", 36)
+	mb.disabled = not game.meta.can_use("moves5")
+	mb.pressed.connect(func():
+		game.play("click")
+		game.plus_five())
+	card_box.add_child(mb)
+	var lives_left: int = maxi(0, game.meta.lives - 1)
 	var rb = _button("Try again", "teal")
 	rb.pressed.connect(func():
 		game.play("click")
-		game.start_level(game.level_idx))
+		game.give_up(false))
 	card_box.add_child(rb)
-	var lb = _button("All levels", "ghost")
+	var n = _label("Giving up costs a life (%d left after)." % lives_left, font_body, 22, INK_SOFT)
+	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_box.add_child(n)
+	var lb = _button("Map", "ghost")
 	lb.pressed.connect(func():
 		game.play("click")
-		game.state = "menu"
-		show_menu())
+		game.give_up(true))
 	card_box.add_child(lb)
 	_show_card()
 
@@ -495,6 +930,10 @@ func _button(text: String, kind: String) -> Button:
 	var bg := Color("f8c23a")
 	var edge := Color("a86c10")
 	var fg := Color("3b2203")
+	if kind == "dark":
+		bg = Color("4b3f6e")
+		edge = Color("2a2245")
+		fg = Color("c9bba3")
 	if kind == "teal":
 		bg = Color("2fbfae")
 		edge = Color("136b60")
