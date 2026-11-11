@@ -485,7 +485,7 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	lg.position = Vector2(vs.x * 0.15, mt + 110.0)
 	lg.size = Vector2(vs.x * 0.7, vs.x * 0.7 * 0.42)
 	map_view.top_pad = mt + 110.0 + vs.x * 0.3
-	map_view.bottom_pad = safe.y + 220.0
+	map_view.bottom_pad = safe.y + 330.0
 
 func set_level(n: int, title: String, col: Color) -> void:
 	lvl_label.text = "Level %d" % n
