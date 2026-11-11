@@ -48,6 +48,13 @@ var map_view: Control
 var top_bar: Control
 var coins_icon: Control
 var coins_label: Label
+var bar_coins: PanelContainer      # coin count shown inside a level
+var bar_coins_label: Label
+var title_layer: Control           # the start screen with the logo
+var title_logo: TextureRect
+var title_tap: Label
+var title_hero: TextureRect
+var title_t := 0.0
 var lives_icon: Control
 var lives_label: Label
 var lives_timer: Label
@@ -326,6 +333,18 @@ func build() -> void:
 			game.use_booster(k2))
 		bar.add_child(b)
 		bar_btns[key] = b
+	bar_coins = PanelContainer.new()
+	bar_coins.add_theme_stylebox_override("panel", _box(Color(0.08, 0.06, 0.14, 0.88), GOLD_DEEP, 30, 3, 10))
+	bar_coins.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bch := HBoxContainer.new()
+	bch.add_theme_constant_override("separation", 8)
+	var bci := CoinIcon.new()
+	bci.custom_minimum_size = Vector2(40, 40)
+	bch.add_child(bci)
+	bar_coins_label = _label("0", font_display, 34, INK)
+	bch.add_child(bar_coins_label)
+	bar_coins.add_child(bch)
+	bar.add_child(bar_coins)
 
 	# ----- tip and praise -----
 	tip_panel = PanelContainer.new()
@@ -390,14 +409,53 @@ func build() -> void:
 		game.play("click")
 		game.select_level(game.meta.current_level()))
 	map_layer.add_child(play_btn)
-	var logo := TextureRect.new()
-	logo.name = "MapLogo"
-	logo.texture = load("res://assets/gfx/ui/logo.png")
-	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	map_layer.add_child(logo)
 	map_layer.visible = false
+
+	# ----- title screen -----
+	title_layer = Control.new()
+	title_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(title_layer)
+	var tbg := TextureRect.new()
+	tbg.name = "TitleBg"
+	var tbp := "res://assets/gfx/ui/title_bg.jpg"
+	if not ResourceLoader.exists(tbp):
+		tbp = "res://assets/gfx/rooms/room_sand.jpg"
+	tbg.texture = load(tbp)
+	tbg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tbg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	tbg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tbg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title_layer.add_child(tbg)
+	var tshade := ColorRect.new()
+	tshade.name = "TitleShade"
+	tshade.color = Color(0.05, 0.03, 0.1, 0.0 if tbp.ends_with("title_bg.jpg") else 0.35)
+	tshade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tshade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title_layer.add_child(tshade)
+	title_hero = TextureRect.new()
+	var hp := "res://assets/gfx/ui/title_hero.png"
+	if not ResourceLoader.exists(hp):
+		hp = "res://assets/gfx/zaki3/exit_1.png"
+	title_hero.texture = load(hp)
+	title_hero.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_hero.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	title_hero.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_layer.add_child(title_hero)
+	title_logo = TextureRect.new()
+	title_logo.texture = load("res://assets/gfx/ui/logo.png")
+	title_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	title_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_layer.add_child(title_logo)
+	title_tap = _label("Tap to start", font_display, 46, GOLD)
+	_heading(title_tap)
+	title_tap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_layer.add_child(title_tap)
+	title_layer.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and title_layer.visible:
+			hide_title())
+	title_layer.visible = false
 
 	# ----- overlay -----
 	overlay = Control.new()
@@ -454,10 +512,13 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	bar.position = Vector2(0, bottom)
 	bar.size = Vector2(vs.x, BAR_H)
 	var keys := ["hammer", "shuffle", "moves5"]
+	var bgap := minf(150.0, (vs.x - 200.0) / 3.2)
 	for k in keys.size():
 		var b: Control = bar_btns[keys[k]]
 		b.size = Vector2(104, 108)
-		b.position = Vector2(vs.x / 2.0 + (k - 1) * 150.0 - 52.0, 4.0)
+		b.position = Vector2(vs.x / 2.0 + 70.0 + (k - 1) * bgap - 52.0, 4.0)
+	bar_coins.position = Vector2(pad - 6.0, 28.0)
+	bar_coins.size = Vector2(0, 0)
 	var tpw := minf(vs.x - 40.0, 640.0)
 	tip_panel.custom_minimum_size = Vector2(tpw, 0)
 	tip_panel.size = Vector2(tpw, 0)
@@ -481,10 +542,14 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	var pw := minf(vs.x - 120.0, 460.0)
 	play_btn.position = Vector2((vs.x - pw) / 2.0, vs.y - safe.y - 150.0)
 	play_btn.size = Vector2(pw, 112)
-	var lg: Control = map_layer.get_node("MapLogo")
-	lg.position = Vector2(vs.x * 0.15, mt + 110.0)
-	lg.size = Vector2(vs.x * 0.7, vs.x * 0.7 * 0.42)
-	map_view.top_pad = mt + 110.0 + vs.x * 0.3
+	map_view.top_pad = mt + 150.0
+	# title
+	title_logo.size = Vector2(vs.x * 0.86, vs.x * 0.86 * 0.5)
+	title_logo.position = Vector2(vs.x * 0.07, mt + vs.y * 0.08)
+	title_hero.size = Vector2(vs.x * 0.62, vs.y * 0.36)
+	title_hero.position = Vector2(vs.x * 0.19, vs.y * 0.44)
+	title_tap.size = Vector2(vs.x, 70)
+	title_tap.position = Vector2(0, vs.y - safe.y - 190.0)
 	map_view.bottom_pad = safe.y + 330.0
 
 func set_level(n: int, title: String, col: Color) -> void:
@@ -508,6 +573,8 @@ func refresh_bar() -> void:
 		b.price = int(game.meta.PRICES[k])
 		b.armed = (k == "hammer" and game.hammer_armed)
 		b.queue_redraw()
+	bar_coins_label.text = str(game.meta.coins)
+	bar_coins.reset_size()
 
 func set_tip(text: String, hold := 0.0) -> void:
 	if tip_tw:
@@ -539,6 +606,8 @@ func praise(text: String) -> void:
 	t.tween_property(praise_label, "modulate:a", 0.0, 0.35)
 
 func _process(dt: float) -> void:
+	if title_layer.visible:
+		_title_anim(dt)
 	sec_t += dt
 	if sec_t < 0.5:
 		return
@@ -561,6 +630,38 @@ func _refresh_top() -> void:
 	lives_timer.text = "Full" if game.meta.lives >= game.meta.MAX_LIVES else "%d:%02d" % [sl / 60, sl % 60]
 	coins_label.text = str(game.meta.coins)
 	play_btn.text = "Level %d" % (game.meta.current_level() + 1)
+
+func show_title() -> void:
+	hide_overlay()
+	hud.visible = false
+	bar.visible = false
+	map_layer.visible = false
+	title_layer.visible = true
+	title_t = 0.0
+	title_logo.pivot_offset = title_logo.size / 2.0
+	title_logo.scale = Vector2(0.2, 0.2)
+	title_logo.modulate.a = 0.0
+	var tw := create_tween().set_parallel()
+	tw.tween_property(title_logo, "scale", Vector2.ONE, 0.7).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(title_logo, "modulate:a", 1.0, 0.4)
+
+func hide_title() -> void:
+	if not title_layer.visible:
+		return
+	game.play("click")
+	var tw := create_tween()
+	tw.tween_property(title_layer, "modulate:a", 0.0, 0.35)
+	tw.tween_callback(func():
+		title_layer.visible = false
+		title_layer.modulate.a = 1.0)
+	game.show_map()
+
+func _title_anim(dt: float) -> void:
+	title_t += dt
+	title_tap.modulate.a = 0.55 + 0.45 * sin(title_t * 3.5)
+	title_hero.position.y = vsize.y * 0.44 + sin(title_t * 1.6) * 8.0
+	if title_logo.modulate.a >= 1.0:
+		title_logo.rotation = sin(title_t * 1.2) * 0.02
 
 func show_map() -> void:
 	hide_overlay()

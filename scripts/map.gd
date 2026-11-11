@@ -20,15 +20,26 @@ var drag_dist := 0.0
 var t := 0.0
 var top_pad := 220.0       # room for the top bar
 var bottom_pad := 260.0    # room for the play button
-var room_tex := {}
+var map_tex := {}         # world index -> its road-map background (assets/gfx/map/map_<n>.jpg)
+var river_trace := {}     # world index -> river centre x (fraction of image width), bottom to top
+const GROUND := {"sand": [Color("d9a65c"), Color("a8722f")], "iron": [Color("8d929c"), Color("50566a")],
+	"crystal": [Color("6d4b94"), Color("33214f")], "emerald": [Color("6a2f1c"), Color("2a120c")],
+	"tomb": [Color("8a7660"), Color("4a3d33")], "temple": [Color("5b9a55"), Color("2b5a33")]}
 var boss_tex := {}
 var hero_tex: Texture2D
 var badge_tex := {}
 
 func setup() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	for n in ["sand", "water", "crystal", "lava"]:
-		room_tex[n] = load("res://assets/gfx/rooms/room_%s.jpg" % n)
+	for w in game.WORLDS.size():
+		var p := "res://assets/gfx/map/map_%d.jpg" % (w + 1)
+		if ResourceLoader.exists(p):
+			map_tex[w] = load(p)
+		var jp := "res://assets/gfx/map/river_%d.json" % (w + 1)
+		if FileAccess.file_exists(jp):
+			var d = JSON.parse_string(FileAccess.get_file_as_string(jp))
+			if d is Array and d.size() > 2:
+				river_trace[w] = d
 	for n in ["golem", "mummy", "cobra"]:
 		boss_tex[n] = load("res://assets/gfx/chasers/%s.png" % n)
 	hero_tex = load("res://assets/gfx/zaki3/exit_1.png")
@@ -43,10 +54,33 @@ func total_h() -> float:
 func node_pos(i: int) -> Vector2:
 	var w := i / 10
 	var y := total_h() - bottom_pad - i * SPACING - w * WORLD_GAP - SPACING * 0.5
-	var x := size.x * 0.5 + sin(i * 0.85) * size.x * 0.24
-	if i % 10 == 9:
-		x = size.x * 0.5
-	return Vector2(x, y)
+	return Vector2(river_x(y), y)
+
+## World segment w covers [seg_top(w), seg_bot(w)] in map coordinates (no scroll).
+func seg_bot(w: int) -> float:
+	return total_h() - bottom_pad - w * (10 * SPACING + WORLD_GAP) + WORLD_GAP * 0.5
+
+func seg_top(w: int) -> float:
+	return seg_bot(w) - (10 * SPACING + WORLD_GAP)
+
+func world_at(y: float) -> int:
+	return clampi(int((total_h() - bottom_pad + WORLD_GAP * 0.5 - y) / (10 * SPACING + WORLD_GAP)), 0, game.WORLDS.size() - 1)
+
+## The Nile's centre line: traced from the world's map image when there is one, otherwise an S-curve.
+## Both meet the middle of the screen at every world's top and bottom edge, so the worlds join up.
+func river_x(y: float) -> float:
+	var w := world_at(y)
+	var f := clampf((seg_bot(w) - y) / (seg_bot(w) - seg_top(w)), 0.0, 1.0)
+	if river_trace.has(w) and map_tex.has(w):
+		var tr: Array = river_trace[w]
+		var fi := f * (tr.size() - 1)
+		var k := int(fi)
+		var frac: float = lerpf(float(tr[k]), float(tr[mini(k + 1, tr.size() - 1)]), fi - k)
+		var tex: Texture2D = map_tex[w]
+		var disp_w: float = (seg_bot(w) - seg_top(w)) * tex.get_width() / tex.get_height()
+		return size.x * 0.5 + (frac - 0.5) * disp_w
+	var sgn := 1.0 if w % 2 == 0 else -1.0
+	return size.x * 0.5 + size.x * (0.2 * sin(TAU * f) * sgn + 0.05 * sin(3.0 * PI * f))
 
 func scroll_to(i: int) -> void:
 	scroll = clampf(node_pos(i).y - size.y * 0.58, 0.0, maxf(0.0, total_h() - size.y))
@@ -97,24 +131,26 @@ func _draw() -> void:
 	var W := size.x
 	draw_rect(Rect2(Vector2.ZERO, size), Color("140f24"))
 	var cur: int = game.meta.current_level()
-	# world backdrops
+	# world backdrops: the world's own map image, or a drawn landscape with the Nile
 	for w in game.WORLDS.size():
 		var wd: Dictionary = game.WORLDS[w]
-		var y_bot := node_pos(w * 10).y + SPACING * 0.5 + WORLD_GAP * 0.5 - scroll
-		var y_top := node_pos(w * 10 + 9).y - SPACING * 0.7 - scroll
+		var y_top := seg_top(w) - scroll
+		var y_bot := seg_bot(w) - scroll
 		if y_bot < -50 or y_top > size.y + 50:
 			continue
-		var th: Dictionary = game.THEMES[wd.theme]
-		var rt: Texture2D = room_tex[th.room]
 		var r := Rect2(0, y_top, W, y_bot - y_top)
-		var k := W / rt.get_width()
-		var src_h := minf(rt.get_height(), r.size.y / k)
-		draw_texture_rect_region(rt, r, Rect2(0, (rt.get_height() - src_h) * 0.5, rt.get_width(), src_h), th.room_tint * Color(0.55, 0.55, 0.6))
-		# fades between worlds
-		_vgrad(Rect2(0, y_top, W, 140), Color(0.08, 0.06, 0.14, 1), Color(0.08, 0.06, 0.14, 0))
-		_vgrad(Rect2(0, y_bot - 140, W, 140), Color(0.08, 0.06, 0.14, 0), Color(0.08, 0.06, 0.14, 1))
-		# world banner
-		var by := y_bot - 70.0
+		if map_tex.has(w):
+			var mt: Texture2D = map_tex[w]
+			var dw: float = r.size.y * mt.get_width() / mt.get_height()
+			var src_w: float = mt.get_width() * minf(1.0, W / dw)
+			draw_texture_rect_region(mt, r, Rect2((mt.get_width() - src_w) * 0.5, 0, src_w, mt.get_height()))
+		else:
+			_draw_land(w, r)
+		# soft blend between worlds
+		_vgrad(Rect2(0, y_top - 1, W, 70), Color(0.08, 0.06, 0.14, 0.7), Color(0.08, 0.06, 0.14, 0))
+		_vgrad(Rect2(0, y_bot - 70, W, 71), Color(0.08, 0.06, 0.14, 0), Color(0.08, 0.06, 0.14, 0.7))
+		# world banner at the start of each world
+		var by := y_bot - WORLD_GAP * 0.42
 		var bw := minf(W - 80.0, 520.0)
 		var br := Rect2((W - bw) / 2.0, by - 38.0, bw, 76.0)
 		var sb := StyleBoxFlat.new()
@@ -130,17 +166,18 @@ func _draw() -> void:
 		if wd.mode != "" and badge_tex.has(wd.mode):
 			var bt: Texture2D = badge_tex[wd.mode]
 			draw_texture_rect(bt, Rect2(br.position.x - 30.0, by - 52.0, 104, 104), false)
-	# path
+	# path along the river
+	var cur0: int = game.meta.current_level()
 	for i in game.LEVELS.size() - 1:
 		var a := node_pos(i) - Vector2(0, scroll)
 		var b := node_pos(i + 1) - Vector2(0, scroll)
 		if maxf(a.y, b.y) < -80 or minf(a.y, b.y) > size.y + 80:
 			continue
-		var n := int(a.distance_to(b) / 26.0)
+		var n := int(absf(a.y - b.y) / 24.0)
 		for k in range(1, n):
-			var p := a.lerp(b, float(k) / n)
-			var done: bool = i < cur
-			draw_circle(p, 6.0, Color("f5c542") if done else Color(1, 1, 1, 0.28))
+			var yy := lerpf(a.y, b.y, float(k) / n)
+			var p := Vector2(river_x(yy + scroll), yy)
+			draw_circle(p, 6.0, Color("f5c542") if i < cur0 else Color(1, 1, 1, 0.45))
 	# nodes
 	for i in game.LEVELS.size():
 		var p := node_pos(i) - Vector2(0, scroll)
@@ -187,6 +224,60 @@ func _draw() -> void:
 	var bob := -absf(sin(t * 3.2)) * 10.0
 	var side: float = 1.0 if hp.x < size.x * 0.5 else -1.0
 	draw_texture_rect(hero_tex, Rect2(hp.x + side * (NODE_R + 18.0) - hw / 2.0, hp.y - hh * 0.75 + bob, hw, hh), false)
+
+func _draw_land(w: int, r: Rect2) -> void:
+	var th: String = game.WORLDS[w].theme
+	var gc: Array = GROUND.get(th, GROUND.sand)
+	_vgrad(r, gc[1], gc[0])
+	var lava := th == "emerald"
+	var water := Color("ff7a1a") if lava else Color("2f86c9")
+	var water2 := Color("ffd04a") if lava else Color("5fc0ee")
+	var bank := Color("ffb347").darkened(0.5) if lava else Color("6fae4a")
+	var step := 14.0
+	var y := r.position.y
+	var left_b := PackedVector2Array()
+	var right_b := PackedVector2Array()
+	var left_w := PackedVector2Array()
+	var right_w := PackedVector2Array()
+	while y <= r.end.y + step:
+		var yy := minf(y, r.end.y)
+		var cx := river_x(yy + scroll)
+		var rw := size.x * (0.075 + 0.015 * sin(yy * 0.01 + w))
+		left_b.append(Vector2(cx - rw * 1.7, yy))
+		right_b.append(Vector2(cx + rw * 1.7, yy))
+		left_w.append(Vector2(cx - rw, yy))
+		right_w.append(Vector2(cx + rw, yy))
+		y += step
+	var bank_poly := left_b.duplicate()
+	var rb := right_b.duplicate()
+	rb.reverse()
+	bank_poly.append_array(rb)
+	draw_colored_polygon(bank_poly, bank)
+	var water_poly := left_w.duplicate()
+	var rw2 := right_w.duplicate()
+	rw2.reverse()
+	water_poly.append_array(rw2)
+	draw_colored_polygon(water_poly, water)
+	# shimmer lines drifting down the river
+	for k in left_w.size():
+		if (k + int(t * 6.0)) % 5 == 0:
+			var a := left_w[k].lerp(right_w[k], 0.3)
+			var b := left_w[k].lerp(right_w[k], 0.6)
+			draw_line(a, b, Color(water2, 0.7), 3.0, true)
+	# a few palms / rocks along the banks
+	var rng := RandomNumberGenerator.new()
+	rng.seed = w * 977 + 13
+	for k in 18:
+		var yy := r.position.y + rng.randf() * r.size.y
+		var side := -1.0 if rng.randf() < 0.5 else 1.0
+		var cx := river_x(yy + scroll) + side * size.x * (0.2 + rng.randf() * 0.2)
+		if lava or th == "crystal" or th == "iron":
+			draw_circle(Vector2(cx, yy), 10.0 + rng.randf() * 12.0, gc[1].darkened(0.3))
+		else:
+			draw_line(Vector2(cx, yy), Vector2(cx + 6.0, yy - 46.0), Color("6b4a2a"), 6.0)
+			for leaf in 5:
+				var ang := -PI / 2.0 + (leaf - 2) * 0.6
+				draw_line(Vector2(cx + 6.0, yy - 46.0), Vector2(cx + 6.0, yy - 46.0) + Vector2.from_angle(ang) * 30.0, Color("3f8a3a"), 7.0, true)
 
 func _star(c: Vector2, r: float, col: Color) -> void:
 	var pts := PackedVector2Array()

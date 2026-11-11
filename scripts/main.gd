@@ -278,6 +278,7 @@ func _ready() -> void:
 		for f in ["tut_swipe", "tip_boosters", "tip_boss"]:
 			meta.flags[f] = true
 	show_map()
+	ui.show_title()
 	if autotest:
 		_run_autotest()
 
@@ -298,6 +299,10 @@ func _load_textures() -> void:
 	for n in ["door_edge", "door_full", "spikewall", "spout_lion", "spout_ram"]:
 		tex[n] = load("res://assets/gfx/props/%s.png" % n)
 	tex.pillar = load("res://assets/gfx/stone/pillar.png")
+	# each world can have its own board tile (assets/gfx/board/tile_<world>.png)
+	for w in WORLDS.size():
+		var tp := "res://assets/gfx/board/tile_%d.png" % (w + 1)
+		tex["tile_%d" % w] = load(tp) if ResourceLoader.exists(tp) else tex.tile
 	tex.frieze = load("res://assets/gfx/stone/frieze.png")
 	tex.stonewall = load("res://assets/gfx/stone/wall.jpg")
 	for n in []:
@@ -2619,7 +2624,7 @@ func _draw_bg(ci: CanvasItem) -> void:
 				ci.draw_rect(Rect2(p, Vector2(s, s)), theme.recess[0])
 				continue
 			var shade = Color(1, 1, 1) if (r + c) % 2 == 0 else Color(0.9, 0.88, 0.85)
-			ci.draw_texture_rect(tex.tile, Rect2(p + Vector2(s, s) * 0.02, Vector2(s, s) * 0.96), false, shade)
+			ci.draw_texture_rect(tex.get("tile_%d" % int(L.get("world", 0)), tex.tile), Rect2(p + Vector2(s, s) * 0.02, Vector2(s, s) * 0.96), false, shade)
 
 func _draw_back(ci: CanvasItem) -> void:
 	if L.is_empty():
@@ -2952,6 +2957,9 @@ func _bot_move() -> void:
 
 func _run_autotest() -> void:
 	await wait(1.2)
+	await _shot("00_title")
+	ui.hide_title()
+	await wait(1.0)
 	await _shot("01_map")
 	select_level(0)
 	await wait(0.8)
@@ -2986,4 +2994,8 @@ func _run_autotest() -> void:
 	show_map()
 	await wait(1.0)
 	await _shot("99_map")
+	for wv in [3, 5]:
+		ui.map_view.scroll_to(wv * 10 + 4)
+		await wait(0.8)
+		await _shot("98_map_w%d" % (wv + 1))
 	get_tree().quit()
