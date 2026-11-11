@@ -550,6 +550,7 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	title_hero.position = Vector2(vs.x * 0.19, vs.y * 0.44)
 	title_tap.size = Vector2(vs.x, 70)
 	title_tap.position = Vector2(0, vs.y - safe.y - 190.0)
+	title_tap.pivot_offset = title_tap.size / 2.0
 	map_view.bottom_pad = safe.y + 330.0
 
 func set_level(n: int, title: String, col: Color) -> void:
@@ -658,7 +659,8 @@ func hide_title() -> void:
 
 func _title_anim(dt: float) -> void:
 	title_t += dt
-	title_tap.modulate.a = 0.55 + 0.45 * sin(title_t * 3.5)
+	title_tap.modulate.a = 0.8 + 0.2 * sin(title_t * 3.5)
+	title_tap.scale = Vector2.ONE * (1.0 + 0.04 * sin(title_t * 3.5))
 	title_hero.position.y = vsize.y * 0.44 + sin(title_t * 1.6) * 8.0
 	if title_logo.modulate.a >= 1.0:
 		title_logo.rotation = sin(title_t * 1.2) * 0.02
