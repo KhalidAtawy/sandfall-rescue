@@ -4,6 +4,17 @@ extends CanvasLayer
 const HUD_H := 132.0
 const BAR_H := 118.0
 const MapView := preload("res://scripts/map.gd")
+const TEX_COIN := preload("res://assets/gfx/ui/coin.png")
+const TEX_LIFE := preload("res://assets/gfx/ui/life.png")
+const TEX_GEAR := preload("res://assets/gfx/ui/gear.png")
+const TEX_BOOST := {"hammer": preload("res://assets/gfx/ui/booster_hammer.png"),
+	"shuffle": preload("res://assets/gfx/ui/booster_shuffle.png"),
+	"moves5": preload("res://assets/gfx/ui/booster_moves.png")}
+
+static func draw_fit(ci: CanvasItem, t: Texture2D, rect: Rect2, mod := Color.WHITE) -> void:
+	var s := minf(rect.size.x / t.get_width(), rect.size.y / t.get_height())
+	var sz := Vector2(t.get_width(), t.get_height()) * s
+	ci.draw_texture_rect(t, Rect2(rect.position + (rect.size - sz) / 2.0, sz), false, mod)
 const GOLD := Color("f5c542")
 const GOLD_DEEP := Color("b9821c")
 const INK := Color("fff3dc")
@@ -136,6 +147,8 @@ class LevelTile extends Button:
 
 class CoinIcon extends Control:
 	func _draw() -> void:
+		draw_fit(self, TEX_COIN, Rect2(Vector2(-size.x * 0.1, -size.y * 0.1), size * 1.2))
+		return
 		var c := size / 2.0
 		var r := minf(size.x, size.y) / 2.0
 		draw_circle(c + Vector2(0, 2), r, Color("9a6410"))
@@ -146,6 +159,8 @@ class CoinIcon extends Control:
 
 class HeartIcon extends Control:
 	func _draw() -> void:
+		draw_fit(self, TEX_LIFE, Rect2(Vector2(-size.x * 0.15, -size.y * 0.15), size * 1.3))
+		return
 		var c := size / 2.0
 		var r := minf(size.x, size.y) / 2.0
 		var pts := PackedVector2Array()
@@ -169,7 +184,11 @@ class BoosterBtn extends Button:
 		draw_circle(c + Vector2(0, 4), r, Color(0, 0, 0, 0.3))
 		draw_circle(c, r, Color("f5c542") if armed else Color("3a2d66"))
 		draw_arc(c, r, 0, TAU, 40, Color("b9821c"), 4.0, true)
-		match key:
+		var art_key: String = key
+		if TEX_BOOST.has(art_key):
+			draw_fit(self, TEX_BOOST[art_key], Rect2(c - Vector2(r, r) * 1.05, Vector2(r, r) * 2.1))
+			art_key = ""
+		match art_key:
 			"hammer", "pre_rocket_unused":
 				draw_set_transform(c, -0.7, Vector2.ONE)
 				draw_rect(Rect2(-r * 0.09, -r * 0.2, r * 0.18, r * 0.85), Color("8a5a2b"))
@@ -229,6 +248,8 @@ class PreBtn extends Button:
 
 class GearBtn extends Button:
 	func _draw() -> void:
+		draw_fit(self, TEX_GEAR, Rect2(Vector2.ZERO, size))
+		return
 		var c := size / 2.0
 		var col := Color("f5c542")
 		for k in 8:

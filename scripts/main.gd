@@ -275,7 +275,7 @@ func _ready() -> void:
 	if autotest:
 		meta.lives = 99
 		meta.coins = 9999
-		for f in ["tut_swipe", "tip_boosters", "tip_boss"]:
+		for f in ["tip_boosters", "tip_boss"]:
 			meta.flags[f] = true
 	show_map()
 	ui.show_title()
@@ -299,6 +299,7 @@ func _load_textures() -> void:
 	for n in ["door_edge", "door_full", "spikewall", "spout_lion", "spout_ram"]:
 		tex[n] = load("res://assets/gfx/props/%s.png" % n)
 	tex.pillar = load("res://assets/gfx/stone/pillar.png")
+	tex.hand = load("res://assets/gfx/ui/hand.png")
 	# each world can have its own board tile (assets/gfx/board/tile_<world>.png)
 	for w in WORLDS.size():
 		var tp := "res://assets/gfx/board/tile_%d.png" % (w + 1)
@@ -2809,8 +2810,15 @@ func _draw_fx(ci: CanvasItem) -> void:
 		for cpos in [pa, pb]:
 			ci.draw_arc(cpos, CELL * g * 0.5, 0, TAU, 32, Color(1, 0.95, 0.6, 0.55 + 0.3 * sin(time * 6.0)), maxf(2.0, g * 0.45), true)
 		ci.draw_line(pa, pb, Color(1, 1, 1, 0.35), maxf(2.0, g * 0.5))
-		ci.draw_circle(hp + Vector2(g * 0.6, g * 0.8), CELL * g * 0.3, Color(0, 0, 0, 0.25 * al))
-		ci.draw_circle(hp, CELL * g * 0.3, Color(1, 1, 1, 0.9 * al))
+		# pointing hand: fingertip on the gem, arm coming up from below
+		var ht: Texture2D = tex.hand
+		var hw := CELL * g * 1.7
+		var hh := hw * ht.get_height() / ht.get_width()
+		ci.draw_set_transform(hp + Vector2(g * 0.5, g * 0.8), -PI / 2.0, Vector2.ONE)
+		ci.draw_texture_rect(ht, Rect2(-hw, -hh * 0.32, hw, hh), false, Color(0, 0, 0, 0.25 * al))
+		ci.draw_set_transform(hp, -PI / 2.0, Vector2.ONE)
+		ci.draw_texture_rect(ht, Rect2(-hw, -hh * 0.32, hw, hh), false, Color(1, 1, 1, al))
+		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		ci.draw_arc(hp, CELL * g * 0.3 + (1.0 - al) * g * 3.0, 0, TAU, 32, Color(1, 0.85, 0.3, al), maxf(2.0, g * 0.4), true)
 	var S = CELL * g * 0.8
 	for f in fx:

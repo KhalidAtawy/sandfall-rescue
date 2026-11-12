@@ -28,6 +28,8 @@ const GROUND := {"sand": [Color("d9a65c"), Color("a8722f")], "iron": [Color("8d9
 var boss_tex := {}
 var hero_tex: Texture2D
 var badge_tex := {}
+var node_tex := {}        # "node", "node_boss", "node_locked" level buttons
+var banner_tex: Texture2D
 
 func setup() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -43,6 +45,12 @@ func setup() -> void:
 	for n in ["golem", "mummy", "cobra"]:
 		boss_tex[n] = load("res://assets/gfx/chasers/%s.png" % n)
 	hero_tex = load("res://assets/gfx/zaki3/exit_1.png")
+	for k in ["node", "node_boss", "node_locked"]:
+		var np := "res://assets/gfx/map/%s.png" % k
+		if ResourceLoader.exists(np):
+			node_tex[k] = load(np)
+	if ResourceLoader.exists("res://assets/gfx/ui/banner.png"):
+		banner_tex = load("res://assets/gfx/ui/banner.png")
 	for m in ["drain", "iron", "chain", "crust", "wrap", "race"]:
 		var p := "res://assets/gfx/badges/badge_%s.png" % m
 		if ResourceLoader.exists(p):
@@ -151,18 +159,27 @@ func _draw() -> void:
 		_vgrad(Rect2(0, y_bot - 70, W, 71), Color(0.08, 0.06, 0.14, 0), Color(0.08, 0.06, 0.14, 0.7))
 		# world banner at the start of each world
 		var by := y_bot - WORLD_GAP * 0.42
-		var bw := minf(W - 80.0, 520.0)
-		var br := Rect2((W - bw) / 2.0, by - 38.0, bw, 76.0)
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(0.17, 0.12, 0.3, 0.92)
-		sb.border_color = Color("b9821c")
-		sb.set_border_width_all(4)
-		sb.set_corner_radius_all(38)
-		draw_style_box(sb, br)
 		var title := "World %d · %s" % [w + 1, wd.name]
 		var fs := 32
 		var tw := f_display.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		draw_string(f_display, Vector2((W - tw) / 2.0, by + 12.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("f5c542"))
+		var br: Rect2
+		if banner_tex:
+			var bw := minf(W - 30.0, maxf(560.0, tw * 1.7))
+			var bh := bw * banner_tex.get_height() / banner_tex.get_width()
+			br = Rect2((W - bw) / 2.0, by - bh * 0.5, bw, bh)
+			draw_texture_rect(banner_tex, br, false)
+			draw_string(f_display, Vector2((W - tw) / 2.0, by + 11.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("5a3510"))
+			br = Rect2(br.position.x + 10.0, by - 38.0, bw, 76.0)
+		else:
+			var bw := minf(W - 80.0, 520.0)
+			br = Rect2((W - bw) / 2.0, by - 38.0, bw, 76.0)
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = Color(0.17, 0.12, 0.3, 0.92)
+			sb.border_color = Color("b9821c")
+			sb.set_border_width_all(4)
+			sb.set_corner_radius_all(38)
+			draw_style_box(sb, br)
+			draw_string(f_display, Vector2((W - tw) / 2.0, by + 12.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("f5c542"))
 		if wd.mode != "" and badge_tex.has(wd.mode):
 			var bt: Texture2D = badge_tex[wd.mode]
 			draw_texture_rect(bt, Rect2(br.position.x - 30.0, by - 52.0, 104, 104), false)
@@ -196,15 +213,29 @@ func _draw() -> void:
 			var bh := 150.0
 			var bw2 := bh * bt.get_width() / bt.get_height()
 			draw_texture_rect(bt, Rect2(p.x - bw2 / 2.0, p.y - r - bh + 30.0, bw2, bh), false, Color(1, 1, 1) if unlocked else Color(0.45, 0.45, 0.5))
-		draw_circle(p + Vector2(0, 7), r, Color(0, 0, 0, 0.35))
-		draw_circle(p, r, col.darkened(0.35))
-		draw_circle(p, r - 7.0, col)
-		draw_circle(p + Vector2(-r * 0.3, -r * 0.35), r * 0.22, Color(1, 1, 1, 0.35))
+		var nk: String = "node_locked" if not unlocked else ("node_boss" if lv.boss else "node")
+		var art: bool = node_tex.has(nk)
+		var lift := 0.0
+		if art:
+			var nt: Texture2D = node_tex[nk]
+			var nh := r * 2.5
+			var nw := nh * nt.get_width() / nt.get_height()
+			draw_circle(p + Vector2(0, 8), r * 1.05, Color(0, 0, 0, 0.3))
+			draw_texture_rect(nt, Rect2(p.x - nw / 2.0, p.y - nh * 0.53, nw, nh), false)
+			if not unlocked:
+				lift = -r * 0.25
+		else:
+			draw_circle(p + Vector2(0, 7), r, Color(0, 0, 0, 0.35))
+			draw_circle(p, r, col.darkened(0.35))
+			draw_circle(p, r - 7.0, col)
+			draw_circle(p + Vector2(-r * 0.3, -r * 0.35), r * 0.22, Color(1, 1, 1, 0.35))
 		var label: String = "BOSS" if lv.boss else str(i + 1)
-		var fs2: int = 30 if lv.boss else 34
+		var fs2: int = 30 if lv.boss else (28 if not unlocked and art else 36)
 		var lw := f_display.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs2).x
-		var tc: Color = Color("3b2203") if unlocked else Color("2a2540")
-		draw_string(f_display, Vector2(p.x - lw / 2.0, p.y + fs2 * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs2, tc)
+		var tc: Color = Color("4a2a06") if unlocked else Color("2a2540")
+		if art and unlocked and stars > 0:
+			tc = Color("6b3a00")
+		draw_string(f_display, Vector2(p.x - lw / 2.0, p.y + lift + fs2 * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs2, tc)
 		if lv.boss:
 			var nl := str(i + 1)
 			var nw := f_body.get_string_size(nl, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
@@ -212,7 +243,7 @@ func _draw() -> void:
 		if stars > 0:
 			for s in 3:
 				_star(p + Vector2((s - 1) * 26.0, r + 14.0 - (4.0 if s == 1 else 0.0)), 12.0, Color("f5c542") if s < stars else Color(0.3, 0.26, 0.45))
-		if not unlocked:
+		if not unlocked and not art:
 			var lc := p + Vector2(r * 0.62, -r * 0.62)
 			draw_circle(lc, 16.0, Color("2a2540"))
 			draw_rect(Rect2(lc - Vector2(8, 2), Vector2(16, 12)), Color("c9bba3"))
