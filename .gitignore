@@ -2,3 +2,5 @@
 build/
 shots/
 *.log
+*.import
+.godot/

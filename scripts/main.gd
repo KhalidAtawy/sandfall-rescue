@@ -2812,7 +2812,7 @@ func _draw_fx(ci: CanvasItem) -> void:
 		ci.draw_line(pa, pb, Color(1, 1, 1, 0.35), maxf(2.0, g * 0.5))
 		# pointing hand: fingertip on the gem, arm coming up from below
 		var ht: Texture2D = tex.hand
-		var hw := CELL * g * 1.7
+		var hw := CELL * g * 2.3
 		var hh := hw * ht.get_height() / ht.get_width()
 		ci.draw_set_transform(hp + Vector2(g * 0.5, g * 0.8), -PI / 2.0, Vector2.ONE)
 		ci.draw_texture_rect(ht, Rect2(-hw, -hh * 0.32, hw, hh), false, Color(0, 0, 0, 0.25 * al))

@@ -11,10 +11,7 @@ const TEX_BOOST := {"hammer": preload("res://assets/gfx/ui/booster_hammer.png"),
 	"shuffle": preload("res://assets/gfx/ui/booster_shuffle.png"),
 	"moves5": preload("res://assets/gfx/ui/booster_moves.png")}
 
-static func draw_fit(ci: CanvasItem, t: Texture2D, rect: Rect2, mod := Color.WHITE) -> void:
-	var s := minf(rect.size.x / t.get_width(), rect.size.y / t.get_height())
-	var sz := Vector2(t.get_width(), t.get_height()) * s
-	ci.draw_texture_rect(t, Rect2(rect.position + (rect.size - sz) / 2.0, sz), false, mod)
+const Fit := preload("res://scripts/fit.gd")
 const GOLD := Color("f5c542")
 const GOLD_DEEP := Color("b9821c")
 const INK := Color("fff3dc")
@@ -147,7 +144,7 @@ class LevelTile extends Button:
 
 class CoinIcon extends Control:
 	func _draw() -> void:
-		draw_fit(self, TEX_COIN, Rect2(Vector2(-size.x * 0.1, -size.y * 0.1), size * 1.2))
+		Fit.draw(self, TEX_COIN, Rect2(Vector2(-size.x * 0.1, -size.y * 0.1), size * 1.2))
 		return
 		var c := size / 2.0
 		var r := minf(size.x, size.y) / 2.0
@@ -159,7 +156,7 @@ class CoinIcon extends Control:
 
 class HeartIcon extends Control:
 	func _draw() -> void:
-		draw_fit(self, TEX_LIFE, Rect2(Vector2(-size.x * 0.15, -size.y * 0.15), size * 1.3))
+		Fit.draw(self, TEX_LIFE, Rect2(Vector2(-size.x * 0.15, -size.y * 0.15), size * 1.3))
 		return
 		var c := size / 2.0
 		var r := minf(size.x, size.y) / 2.0
@@ -186,7 +183,7 @@ class BoosterBtn extends Button:
 		draw_arc(c, r, 0, TAU, 40, Color("b9821c"), 4.0, true)
 		var art_key: String = key
 		if TEX_BOOST.has(art_key):
-			draw_fit(self, TEX_BOOST[art_key], Rect2(c - Vector2(r, r) * 1.05, Vector2(r, r) * 2.1))
+			Fit.draw(self, TEX_BOOST[art_key], Rect2(c - Vector2(r, r) * 1.05, Vector2(r, r) * 2.1))
 			art_key = ""
 		match art_key:
 			"hammer", "pre_rocket_unused":
@@ -248,7 +245,7 @@ class PreBtn extends Button:
 
 class GearBtn extends Button:
 	func _draw() -> void:
-		draw_fit(self, TEX_GEAR, Rect2(Vector2.ZERO, size))
+		Fit.draw(self, TEX_GEAR, Rect2(Vector2.ZERO, size))
 		return
 		var c := size / 2.0
 		var col := Color("f5c542")
@@ -469,6 +466,11 @@ func build() -> void:
 	title_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	title_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_layer.add_child(title_logo)
+	var tap_bg := PanelContainer.new()
+	tap_bg.name = "TapBg"
+	tap_bg.add_theme_stylebox_override("panel", _box(Color(0.08, 0.05, 0.12, 0.6), GOLD_DEEP, 40, 3, 14))
+	tap_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_layer.add_child(tap_bg)
 	title_tap = _label("Tap to start", font_display, 46, GOLD)
 	_heading(title_tap)
 	title_tap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -571,6 +573,9 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	title_hero.position = Vector2(vs.x * 0.19, vs.y * 0.44)
 	title_tap.size = Vector2(vs.x, 70)
 	title_tap.position = Vector2(0, vs.y - safe.y - 190.0)
+	var tb: Control = title_layer.get_node("TapBg")
+	tb.size = Vector2(minf(vs.x - 80.0, 420.0), 84.0)
+	tb.position = Vector2((vs.x - tb.size.x) / 2.0, title_tap.position.y - 7.0)
 	title_tap.pivot_offset = title_tap.size / 2.0
 	map_view.bottom_pad = safe.y + 330.0
 
