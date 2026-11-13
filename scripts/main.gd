@@ -140,6 +140,7 @@ var state = "menu"     # menu, idle, busy, paused, won, lost
 var shaft := {}
 var room := {}
 var door_col := 0
+var area := {}             # everything on the far side of the door: open to the sky, full of debris
 var facing := 1
 var door_open := false
 var extra_used := false
@@ -481,17 +482,22 @@ func start_level(i: int) -> void:
 		door_col = shaft.x1
 		room = {"x0": door_col + 1, "x1": BX + COLS * CELL, "y0": BY - ROOM_H, "y1": BY}
 		facing = -1
+	# the debris area runs from the door all the way to the far edge of the board
+	area = {"x0": shaft.x0, "x1": BX + COLS * CELL, "y0": shaft.y0} if facing > 0 else {"x0": BX, "x1": shaft.x1, "y0": shaft.y0}
 	sand = PackedByteArray()
 	sand.resize(SW * SH)
 	mask = PackedByteArray()
 	mask.resize(SW * SH)
 	grains = 0
-	for y in range(shaft.y0, BY):
-		for x in range(shaft.x0, shaft.x1):
+	var extra_cells := 0
+	for y in range(area.y0, BY):
+		for x in range(area.x0, area.x1):
 			mask[y * SW + x] = 1
-			if y >= shaft.y0 + 7:
+			if y >= area.y0 + 7:
 				sand[y * SW + x] = 1 + randi() % 3
 				grains += 1
+				if x < shaft.x0 or x >= shaft.x1:
+					extra_cells += 1
 	for id in rubble:
 		var c: int = id % COLS
 		var r: int = id / COLS
@@ -505,7 +511,8 @@ func start_level(i: int) -> void:
 	shaft0 = shaft_cap
 	shaft_sand = _count_shaft()
 	_compute_active_region()
-	moves = L.moves
+	# the wider debris area holds more sand; most of it slides into the drain, so give moves for it
+	moves = L.moves + roundi(extra_cells * 0.7 / 104.0)
 	door_open = false
 	extra_used = false
 	selected = Vector2i(-1, -1)
@@ -528,14 +535,14 @@ func start_level(i: int) -> void:
 	pour_left = 3.0          # the source is still pouring when the level starts
 	pour_cd = _pour_period()
 	pour_acc = 0.0
-	pour_x = (shaft.x0 + shaft.x1) * 0.5
+	pour_x = (area.x0 + area.x1) * 0.5 + facing * 3.0
 	danger_shown = -1
 	mound_col = _avg_color(tex["grains_" + theme.grains]) * theme.gtint
 	flinch = 0.0
 	hud_sec = -1
 	hud_pct = -1
 	var sw_cells: float = SAFE_H * tex.door_full.get_width() / tex.door_full.get_height()
-	safe_x = (shaft.x1 - sw_cells / 2.0 - 0.6) if facing > 0 else (shaft.x0 + sw_cells / 2.0 + 0.6)
+	safe_x = (area.x1 - sw_cells / 2.0 - 0.6) if facing > 0 else (area.x0 + sw_cells / 2.0 + 0.6)
 	hero_lift = 0.0
 	hero_alpha = 1.0
 	push_max = maxf(4.0, absf(_door_face() - _hazard_front()) - 8.5)
@@ -1159,12 +1166,12 @@ func _pour(dt: float) -> void:
 		return
 	pour_left -= dt
 	pour_acc += pour_rate * dt
-	var w: int = shaft.x1 - shaft.x0
+	var w: int = area.x1 - area.x0
 	var placed := 0
 	while pour_acc >= 1.0:
 		pour_acc -= 1.0
-		var spread := maxf(2.0, w * 0.35)
-		var x := clampi(int(pour_x + randf_range(-spread, spread) * 0.5), shaft.x0, shaft.x1 - 1)
+		var spread := maxf(2.0, w * 0.2)
+		var x := clampi(int(pour_x + randf_range(-spread, spread) * 0.5), area.x0, area.x1 - 1)
 		for y in range(shaft.y0 + 5, shaft.y0 + 8):
 			var i: int = y * SW + x
 			if mask[i] == 1 and sand[i] == 0:
@@ -1794,6 +1801,17 @@ func _escape() -> void:
 	hero_pose = "push"
 	tween(self, {"hz_p": 0.0}, 0.35, "out")
 	await wait(0.4)
+	# whatever debris is left on the far side collapses into the drain
+	for y in range(area.y0, BY):
+		for x in range(area.x0, area.x1):
+			var i: int = y * SW + x
+			if sand[i] != 0:
+				if randf() < 0.08:
+					parts.append({"x": wx(x + 0.5), "y": wy(y + 0.5), "vx": (randf() - 0.5) * 80.0 * g / 6.0, "vy": 0.0,
+						"life": 0.0, "max": 0.7, "col": theme.gtint, "v": sand[i], "size": g * 1.3, "grav": 900.0 * g / 6.0, "kind": "grain"})
+				sand[i] = 0
+				grains -= 1
+	sand_dirty = true
 	play("crack", 1.3, -6.0)
 	burst(wx(door_col + 0.5), wy(BY - 3), Color("c9a46a"), 12, 0.8)
 	tween(self, {"door_swing": 1.0}, 0.8, "in")
@@ -2673,7 +2691,7 @@ func _anim(dt: float) -> void:
 func _draw_hazard(ci: CanvasItem) -> void:
 	if room.is_empty():
 		return
-	_draw_mound(ci)
+	_draw_door(ci)
 	match L.get("hazard", ""):
 		"spikes":
 			_draw_spike_wall(ci)
@@ -2682,49 +2700,38 @@ func _draw_hazard(ci: CanvasItem) -> void:
 		"lava":
 			_draw_lava(ci)
 
-## The debris spilling under the door, piling up and shoving Zaki back.
-func _draw_mound(ci: CanvasItem) -> void:
-	if hz_p < 0.01 or door_swing > 0.5:
+## When the debris shoves the door into the room, it fills the gap behind the door.
+func _draw_push_debris(ci: CanvasItem, off: float) -> void:
+	if absf(off) < 0.05 or door_swing > 0.5:
 		return
-	var xd := _door_face() - facing * 0.2
-	var xf := _push_face() + facing * 1.8
-	var len_c := absf(xd - xf)
-	if len_c < 0.5:
-		return
-	var hd := minf(ROOM_H * 0.7, 6.0 + hz_p * 12.0)
-	var hf := 7.0
-	var floor_y := float(BY) - 1.0
-	var top := PackedVector2Array()
-	var n := 18
-	for k in n + 1:
-		var t := float(k) / n
-		var x := lerpf(xd, xf, t)
-		var h := lerpf(hd, hf, t * t * (3.0 - 2.0 * t)) + sin(t * 9.0 + time * 1.5) * 0.25
-		top.append(Vector2(wx(x), wy(floor_y - h)))
-	var poly := PackedVector2Array()
-	poly.append(Vector2(wx(xd), wy(floor_y + 0.6)))
-	poly.append_array(top)
-	poly.append(Vector2(wx(xf), wy(floor_y + 0.6)))
+	var slot := door_col + 0.5 + facing * DOOR_EDGE_W / 2.0
+	var x0 := minf(wx(slot), wx(slot + off))
+	var x1 := maxf(wx(slot), wx(slot + off))
+	var top := wy(room.y0) + g * 0.6
+	var bot := wy(BY) - g * 0.2
 	var base_col: Color = mound_col
-	ci.draw_colored_polygon(poly, base_col.darkened(0.2))
-	# lighter crest and grain speckles so it reads as loose debris
-	for k in n:
-		ci.draw_line(top[k], top[k + 1], base_col.lightened(0.15), g * 0.7, true)
+	ci.draw_rect(Rect2(x0, top, x1 - x0, bot - top), base_col.darkened(0.2))
+	var gt: Texture2D = tex["grains_" + theme.grains]
+	var cw: float = gt.get_height()
+	var sz := g * 1.15
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 77
-	for k in int(len_c * 6.0):
-		var t := rng.randf()
-		var x := lerpf(xd, xf, t)
-		var h := lerpf(hd, hf, t * t * (3.0 - 2.0 * t))
-		var y := floor_y - rng.randf() * h
-		var c := base_col.darkened(rng.randf() * 0.4)
-		ci.draw_circle(Vector2(wx(x), wy(y)), g * (0.25 + rng.randf() * 0.25), c)
-	# grains trickling out under the door while the pressure grows
-	if state == "idle" or state == "busy":
-		if _push_rate() > 0.0 and randf() < 0.6:
-			parts.append({"x": wx(xd) + (randf() - 0.5) * g, "y": wy(floor_y - hd + 0.5), "vx": -facing * (20.0 + randf() * 50.0) * g / 6.0,
-				"vy": -20.0 * g / 6.0, "life": 0.0, "max": 0.5, "col": theme.gtint, "v": 1 + randi() % 3, "size": g * 0.9,
-				"grav": 500.0 * g / 6.0, "kind": "grain"})
+	rng.seed = 91
+	var nx := int((x1 - x0) / sz) + 1
+	var ny := int((bot - top) / sz) + 1
+	for iy in ny:
+		for ix in nx:
+			var v := rng.randi() % 3
+			var px := x1 - (ix + 1) * sz if facing > 0 else x0 + ix * sz
+			if px < x0 - sz * 0.5 or px > x1:
+				continue
+			var jit := Vector2(rng.randf() - 0.5, rng.randf() - 0.5) * sz * 0.3
+			ci.draw_texture_rect_region(gt, Rect2(Vector2(px, top + iy * sz) + jit, Vector2(sz, sz) * 1.15), Rect2(v * cw, 0, cw, cw), theme.gtint)
+	# grains trickling out under the door while it is being forced back
+	if (state == "idle" or state == "busy") and _push_rate() > 0.0 and randf() < 0.5:
+		var dx := wx(slot + off) - facing * DOOR_EDGE_W * g
+		parts.append({"x": dx, "y": bot - g, "vx": -facing * (30.0 + randf() * 50.0) * g / 6.0,
+			"vy": -30.0 * g / 6.0, "life": 0.0, "max": 0.45, "col": theme.gtint, "v": 1 + randi() % 3, "size": g * 0.9,
+			"grav": 500.0 * g / 6.0, "kind": "grain"})
 
 func _draw_spike_wall(ci: CanvasItem) -> void:
 	var front := _hazard_front()
@@ -2884,12 +2891,12 @@ func _draw_bg(ci: CanvasItem) -> void:
 	var rr = Rect2(wx(room.x0), wy(room.y0), (room.x1 - room.x0) * g, (room.y1 - room.y0) * g)
 	_vgrad(ci, Rect2(rr.position, Vector2(rr.size.x, g * 3.0)), Color(0, 0, 0, 0.4), Color(0, 0, 0, 0))
 	# shaft recess: the tomb wall texture deep in shadow
-	var sr0 = Rect2(wx(shaft.x0), wy(shaft.y0), (shaft.x1 - shaft.x0) * g, (BY - shaft.y0) * g)
+	var sr0 = Rect2(wx(area.x0), wy(area.y0), (area.x1 - area.x0) * g, (BY - area.y0) * g)
 	var kw: float = (14.0 * g) / float(tex.stonewall.get_width())
 	ci.draw_set_transform(sr0.position, 0.0, Vector2(kw, kw))
-	ci.draw_texture_rect(tex.stonewall, Rect2(Vector2.ZERO, sr0.size / kw), true, Color(0.42, 0.36, 0.32))
+	ci.draw_texture_rect(tex.stonewall, Rect2(Vector2.ZERO, sr0.size / kw), true, Color(0.62, 0.55, 0.5))
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	_vgrad(ci, sr0, Color(0, 0, 0, 0.55), Color(0, 0, 0, 0.15))
+	_vgrad(ci, sr0, Color(0, 0, 0, 0.15), Color(0, 0, 0, 0.35))
 	# board backing
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color("101736")
@@ -2939,7 +2946,6 @@ func _draw_frame(ci: CanvasItem) -> void:
 	if L.is_empty():
 		return
 	_draw_frame_inner(ci)
-	_draw_source(ci)
 
 func _draw_frame_inner(ci: CanvasItem) -> void:
 	var t = g * 1.5
@@ -2951,18 +2957,18 @@ func _draw_frame_inner(ci: CanvasItem) -> void:
 	var rx1 = wx(room.x1)
 	var ry = wy(room.y0)
 	var far = rx0 if facing > 0 else rx1
-	# pillars: both sides of the shaft and the room's far wall
-	_tile_v(ci, tex.pillar, sx0 - t * 0.5, sy - t * 0.5, by, t)
-	_tile_v(ci, tex.pillar, sx1 + t * 0.5, sy - t * 0.5, by, t)
+	# pillars: the wall the door sits in (open at the top) and the room's far wall
+	var wall_x = (sx0 - t * 0.5) if facing > 0 else (sx1 + t * 0.5)
+	_tile_v(ci, tex.pillar, wall_x, sy - t * 0.5, by, t)
 	_tile_v(ci, tex.pillar, far, ry, by, t * 0.9)
-	# carved beams: over the shaft, over the room, and the floor ledge above the board
-	_tile_h(ci, tex.frieze, sx0 - t, sx1 + t, sy - t * 0.45, t * 1.1)
+	# carved beams: over the room and the floor ledge above the board
 	_tile_h(ci, tex.frieze, minf(rx0, rx1) - t * 0.4, maxf(rx0, rx1) + t * 0.4, ry - t * 0.2, t)
 	_tile_h(ci, tex.frieze, wx(BX - 0.8), wx(BX + COLS * CELL + 0.8), wy(BY - 0.75), g * 1.5)
-	_draw_door(ci)
 
 func _draw_door(ci: CanvasItem) -> void:
-	var x = wx(door_col + 0.5)
+	var off := -facing * hz_p * push_max
+	_draw_push_debris(ci, off)
+	var x = wx(door_col + 0.5 + off)
 	var top = wy(room.y0) + g * 0.8
 	var bot = wy(BY) - g * 0.2
 	var h = bot - top
@@ -3084,6 +3090,8 @@ func _draw_crust(ci: CanvasItem) -> void:
 		_draw_tex_centered(ci, tex.fx_crust, Vector2(cell_cx(c), cell_cy(r)), Vector2(sz, sz) * 1.02, 0.0, Color(glow, glow, glow))
 
 func _draw_fx(ci: CanvasItem) -> void:
+	if not shaft.is_empty() and not L.is_empty():
+		_draw_source(ci)
 	if mode == "crust":
 		_draw_crust(ci)
 	if not tut_move.is_empty() and state == "idle":
@@ -3237,7 +3245,7 @@ func _draw_add(ci: CanvasItem) -> void:
 			_draw_tex_centered(ci, glow_tex, Vector2(f.x, f.y), Vector2(g, g) * 8.0, 0.0, Color(1.0, 0.6, 0.2, 0.6))
 	if theme.glow > 0.0:
 		# crystal shimmer over the shaft
-		var sr = Rect2(wx(shaft.x0), wy(L.fill_top), (shaft.x1 - shaft.x0) * g, (BY - L.fill_top) * g)
+		var sr = Rect2(wx(area.x0), wy(L.fill_top), (area.x1 - area.x0) * g, (BY - L.fill_top) * g)
 		var pulse = 0.10 + 0.05 * sin(time * 2.0)
 		var col: Color = theme.glow_col
 		col.a = pulse * clampf(float(grains) / float(grains0) * 1.5, 0.0, 1.0)
