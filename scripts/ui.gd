@@ -516,7 +516,9 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	lvl_label.position = Vector2(pad + 96, top + 6)
 	name_label.position = Vector2(pad + 98, top + 50)
 	time_label.position = Vector2(pad + 98, top + 82)
-	extra_label.position = Vector2(pad + 298, top + 87)
+	extra_label.size = Vector2(320, 34)
+	extra_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	extra_label.position = Vector2(vs.x - pad - 320, top + 87)
 	extra_icon.position = Vector2(pad + 252, top + 82)
 	var right = vs.x - pad
 	pct_label.position = Vector2(right - 88, top + 26)
@@ -589,9 +591,17 @@ func update_time(sec: int) -> void:
 	time_label.text = "Time %d:%02d" % [sec / 60, sec % 60]
 	time_label.add_theme_color_override("font_color", Color("ff8f6b") if sec <= 15 else INK)
 
+func update_danger(p: float, pouring: bool) -> void:
+	if pouring:
+		time_label.text = "Debris incoming!"
+		time_label.add_theme_color_override("font_color", Color("ffb347"))
+	else:
+		time_label.text = "Danger %d%%" % roundi(p * 100.0)
+		time_label.add_theme_color_override("font_color", Color("ff6b5b") if p > 0.7 else (Color("ffd36b") if p > 0.4 else INK))
+
 func set_extra(text: String) -> void:
-	extra_icon.visible = text.begins_with("Bandages")
-	extra_label.text = text.replace("Bandages ", "") if extra_icon.visible else text
+	extra_icon.visible = false
+	extra_label.text = text
 
 func refresh_bar() -> void:
 	for k in bar_btns:

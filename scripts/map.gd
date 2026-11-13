@@ -42,8 +42,9 @@ func setup() -> void:
 			var d = JSON.parse_string(FileAccess.get_file_as_string(jp))
 			if d is Array and d.size() > 2:
 				river_trace[w] = d
-	for n in ["golem", "mummy", "cobra"]:
-		boss_tex[n] = load("res://assets/gfx/chasers/%s.png" % n)
+	for n in game.BOSSES:
+		var own := "res://assets/gfx/bosses/%s.png" % n
+		boss_tex[n] = load(own) if ResourceLoader.exists(own) else load("res://assets/gfx/chasers/%s.png" % game.BOSSES[n].base)
 	hero_tex = load("res://assets/gfx/zaki3/exit_1.png")
 	for k in ["node", "node_boss", "node_locked"]:
 		var np := "res://assets/gfx/map/%s.png" % k
@@ -51,7 +52,7 @@ func setup() -> void:
 			node_tex[k] = load(np)
 	if ResourceLoader.exists("res://assets/gfx/ui/banner.png"):
 		banner_tex = load("res://assets/gfx/ui/banner.png")
-	for m in ["drain", "iron", "chain", "crust", "wrap", "race"]:
+	for m in ["drain", "iron", "chain", "crust", "wrap", "race", "jars", "glass", "runes", "curse"]:
 		var p := "res://assets/gfx/badges/badge_%s.png" % m
 		if ResourceLoader.exists(p):
 			badge_tex[m] = load(p)
@@ -212,7 +213,8 @@ func _draw() -> void:
 			var bt: Texture2D = boss_tex[lv.hazard]
 			var bh := 150.0
 			var bw2 := bh * bt.get_width() / bt.get_height()
-			draw_texture_rect(bt, Rect2(p.x - bw2 / 2.0, p.y - r - bh + 30.0, bw2, bh), false, Color(1, 1, 1) if unlocked else Color(0.45, 0.45, 0.5))
+			var tint: Color = game.BOSSES[lv.hazard].tint if not ResourceLoader.exists("res://assets/gfx/bosses/%s.png" % lv.hazard) else Color.WHITE
+			draw_texture_rect(bt, Rect2(p.x - bw2 / 2.0, p.y - r - bh + 30.0, bw2, bh), false, tint if unlocked else Color(0.45, 0.45, 0.5))
 		var nk: String = "node_locked" if not unlocked else ("node_boss" if lv.boss else "node")
 		var art: bool = node_tex.has(nk)
 		var lift := 0.0
