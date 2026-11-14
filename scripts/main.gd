@@ -205,6 +205,9 @@ var shaft_cap := 1          # cells in the shaft area behind the door
 var push_time := 60.0       # seconds to reach the spikes if the shaft stays full and nobody plays
 var pour_left := 0.0        # seconds of pouring left in the current burst
 var pour_rate := 0.0        # grains per second while pouring
+var pour_mul := 1.0         # how hard the current burst hits (boss slams hit harder)
+var last_grains := 0        # to see how much debris the player just destroyed
+var relief := 0.0           # ground Zaki is still winning back after the player cleared debris
 var pour_cd := 0.0          # seconds until the next burst
 var pour_acc := 0.0
 var pour_x := 0.0           # where the source sits (world cells)
@@ -510,6 +513,7 @@ func start_level(i: int) -> void:
 	shaft_cap = (BY - shaft.y0 - 5) * (shaft.x1 - shaft.x0)
 	shaft0 = shaft_cap
 	shaft_sand = _count_shaft()
+	last_grains = grains
 	_compute_active_region()
 	# the wider debris area holds more sand; most of it slides into the drain, so give moves for it
 	moves = L.moves + roundi(extra_cells * 0.7 / 104.0)
@@ -533,6 +537,8 @@ func start_level(i: int) -> void:
 	push_time = float(L.get("push", L.time / 4.0))
 	pour_rate = shaft_cap * 0.07 / 2.5
 	pour_left = 3.0          # the source is still pouring when the level starts
+	pour_mul = 1.0
+	relief = 0.0
 	pour_cd = _pour_period()
 	pour_acc = 0.0
 	pour_x = (area.x0 + area.x1) * 0.5 + facing * 3.0
@@ -1155,10 +1161,13 @@ func _fill() -> float:
 func _pour_period() -> float:
 	return lerpf(15.0, 9.0, clampf(float(L.get("world", 0)) / 9.0, 0.0, 1.0)) + randf() * 3.0
 
-## Pressure pushes Zaki back while the shaft is full; he wins ground back once it is mostly drained.
+## Only falling debris shoves the door back (harder when the pile behind it is full).
+## The rest of the time Zaki leans in and slowly wins ground back.
 func _push_rate() -> float:
-	var f := _fill()
-	return (1.6 * f - 0.38) / push_time
+	var k := 60.0 / push_time
+	if pour_left > 0.0:
+		return (0.05 + 0.05 * _fill()) * pour_mul * k
+	return -0.006 * (1.3 - _fill()) * k
 
 ## The source drops debris into the top of the shaft.
 func _pour(dt: float) -> void:
@@ -1186,6 +1195,7 @@ func _pour(dt: float) -> void:
 
 func pour_burst(sec: float, rate_mul := 1.0) -> void:
 	pour_left = maxf(pour_left, sec)
+	pour_mul = rate_mul
 	pour_rate = shaft_cap * 0.07 / 2.5 * rate_mul
 	play("sand", 0.7, -6.0)
 
@@ -2307,6 +2317,14 @@ func _process(dt: float) -> void:
 				pour_cd = _pour_period()
 				pour_burst(2.5)
 			hz_p = clampf(hz_p + _push_rate() * dt, 0.0, 1.0)
+			# debris the player destroys takes weight off the door: Zaki shoves it back
+			if grains < last_grains:
+				relief += float(last_grains - grains) * 0.5 / float(shaft_cap)
+			last_grains = grains
+			if relief > 0.0:
+				var step := minf(relief, dt * 0.35)
+				relief -= step
+				hz_p = maxf(0.0, hz_p - step)
 			if state == "idle" and goal_done():
 				_win()
 			elif state == "idle" and hz_p >= 1.0:
@@ -2625,7 +2643,7 @@ func _anim(dt: float) -> void:
 	look_t = maxf(0.0, look_t - dt)
 	flinch = maxf(0.0, flinch - dt)
 	door_hit = maxf(0.0, door_hit - dt * 4.0)
-	push_ph += dt * (2.4 + hz_p * 5.5)
+	push_ph += dt * (2.4 + hz_p * 3.0 + (4.0 if (relief > 0.0 or pour_left <= 0.0) and hz_p > 0.0 else 0.0))
 	var pound_now := sin(hero_t * 0.9) > 0.35 and hz_p >= 0.7 and hero_pose == "push"
 	if pound_now:
 		var ph := int(anim_t * 0.9) % 8
