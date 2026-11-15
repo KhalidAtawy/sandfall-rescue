@@ -82,11 +82,11 @@ const BOSS_EVERY := 3
 const SEALED_CHAMBER_ON := true
 const TRAP_INFO := {
 	"snake": {"name": "giant snake", "hud": "Snake", "lose": "The snake got Zaki!",
-		"text": "SEALED CHAMBER! Zaki is locked in with a giant snake sliding down from the ceiling. It gets closer every second. Drain the debris behind the door before it reaches him. Setting off a power-up makes the snake flinch."},
+		"text": "SEALED CHAMBER! Zaki is locked in with a giant snake sliding down from the ceiling. Here every match destroys its tiles for good and the debris pours into the holes. Dig a path all the way to the bottom of the board so the debris drains out and the door opens. Setting off a power-up makes the snake flinch."},
 	"water": {"name": "rising water", "hud": "Water", "lose": "The water rose too high!",
-		"text": "SEALED CHAMBER! The room is flooding and the water keeps rising. Drain the debris behind the door before it goes over Zaki's head. Setting off a power-up holds the water for a moment."},
+		"text": "SEALED CHAMBER! The room is flooding and the water keeps rising. Here every match destroys its tiles for good and the debris pours into the holes. Dig a path all the way to the bottom of the board so the debris drains out and the door opens. Setting off a power-up holds the water for a moment."},
 	"lava": {"name": "creeping lava", "hud": "Lava", "lose": "The lava reached Zaki!",
-		"text": "SEALED CHAMBER! Lava is creeping across the floor toward Zaki. Drain the debris behind the door before it touches him. Setting off a power-up holds the lava for a moment."},
+		"text": "SEALED CHAMBER! Lava is creeping across the floor toward Zaki. Here every match destroys its tiles for good and the debris pours into the holes. Dig a path all the way to the bottom of the board so the debris drains out and the door opens. Setting off a power-up holds the lava for a moment."},
 }
 ## Gem covers: a covered gem is stuck. Matching next to it (or blasting it) removes one layer.
 const COVER_HP := {"bandage": 1, "sand": 1, "web": 1, "magma": 1, "venom": 1, "glass": 2, "gold": 2, "curse": 1, "jar": 2}
@@ -213,6 +213,10 @@ var pour_left := 0.0        # seconds of pouring left in the current burst
 var pour_rate := 0.0        # grains per second while pouring
 var pour_mul := 1.0         # how hard the current burst hits (boss slams hit harder)
 var last_grains := 0        # to see how much debris the player just destroyed
+var dig := false            # Sealed Chamber: matched tiles are destroyed for good and debris flows into the holes
+var dug := {}               # board cells the player has dug out
+var dig_out := 0            # grains that have fallen out through the bottom of the board
+const DIG_WIN := 24         # this many grains through the bottom = the path is open
 var trap := ""              # "", "snake", "water" or "lava": the Sealed Chamber threat on this level
 var trap_time := 120.0      # seconds until the threat reaches Zaki
 var trap_stun := 0.0        # seconds the threat is held back after a power-up
@@ -480,9 +484,19 @@ func start_level(i: int) -> void:
 		for r in range(rect[2], rect[3] + 1):
 			for c in range(rect[0], rect[1] + 1):
 				rubble[r * COLS + c] = true
-	_fill_pockets()
 	var c0: int = L.shaft[0]
 	var c1: int = L.shaft[1]
+	dig = SEALED_CHAMBER_ON and not L.boss and str(L.get("trap", "")) != ""
+	dug.clear()
+	dig_out = 0
+	if dig:
+		# the debris only just reaches into the board: the player digs the rest of the way down
+		for id in rubble.keys():
+			if id / COLS >= 1:
+				rubble.erase(id)
+		for c in range(c0, c1 + 1):
+			rubble[c] = true
+	_fill_pockets()
 	shaft = {"x0": BX + c0 * CELL, "x1": BX + (c1 + 1) * CELL, "y0": 3}
 	if L.room == "left":
 		door_col = shaft.x0 - 1
@@ -542,7 +556,7 @@ func start_level(i: int) -> void:
 	push_time = float(L.get("push", L.time / 4.0))
 	pour_rate = shaft_cap * 0.07 / 2.5
 	trap = str(L.get("trap", "")) if SEALED_CHAMBER_ON and not L.boss else ""
-	trap_time = L.moves * 5.0 + 30.0
+	trap_time = (45.0 + L.moves * 2.0 - 2.0 * float(L.get("world", 0))) if dig else (L.moves * 5.0 + 30.0)
 	trap_stun = 0.0
 	pour_left = 3.0 if trap == "" else 0.0   # the source is still pouring when the level starts
 	pour_mul = 1.0
@@ -590,7 +604,7 @@ func start_level(i: int) -> void:
 	bg_layer.queue_redraw()
 	frame_layer.queue_redraw()
 	ui.set_level(i + 1, ("BOSS · " + BOSSES[L.hazard].name) if L.boss else L.name, theme.ui)
-	mode = L.get("mode", "drain")
+	mode = "drain" if dig else L.get("mode", "drain")
 	wrapped.clear()
 	runes.clear()
 	raised.clear()
@@ -945,10 +959,14 @@ func _pop_gem(m: Gem, delay := 0.0) -> float:
 		var c = int(round(m.x))
 		if in_b(c, r) and grid[r][c] == m:
 			grid[r][c] = null
+			if dig:
+				_dig_cell(c, r)
 	)
 	return delay + 0.2
 
 func damage_rubble(id: int, power := false, depth := 0) -> void:
+	if dig:
+		return   # in a Sealed Chamber the debris is not destroyed, it has to drain out
 	var c: int = id % COLS
 	var r: int = id / COLS
 	var hit := 0
@@ -1024,6 +1042,8 @@ func damage_rubble(id: int, power := false, depth := 0) -> void:
 
 func _update_hud() -> void:
 	var p := maxi(0, ceili(shaft_sand * 100.0 / shaft0))
+	if dig:
+		p = 100 - _dig_depth()   # how far the debris still has to go to reach the bottom
 	hud_pct = p
 	ui.update_hud(moves, p)
 
@@ -1061,7 +1081,77 @@ func door_ready() -> bool:
 
 ## The level's goal: the door is free, plus any extra goal the mode adds.
 func goal_done() -> bool:
+	if dig:
+		return dig_out >= DIG_WIN
 	return door_ready() and _goal_left() == 0
+
+## Sealed Chamber: destroy a tile for good and let the debris in.
+func _dig_cell(c: int, r: int) -> void:
+	var id := r * COLS + c
+	if rubble.has(id):
+		return
+	rubble[id] = true
+	dug[id] = true
+	for y in range(BY + r * CELL, BY + (r + 1) * CELL):
+		for x in range(BX + c * CELL, BX + (c + 1) * CELL):
+			mask[y * SW + x] = 1
+	ax0 = mini(ax0, BX + c * CELL)
+	ax1 = maxi(ax1, BX + (c + 1) * CELL)
+	ay1 = maxi(ay1, mini(BY + (r + 1) * CELL, SH - 1))
+	sand_sleep = false
+	bg_layer.queue_redraw()
+	spr(tex.fx_dust_puff, cell_cx(c), cell_cy(r), CELL * g * 0.5, CELL * g * 1.3, 0.35, randf() * TAU)
+
+## Debris that reaches the bottom edge of the board falls out of the level.
+func _dig_drain() -> void:
+	var y := BY + ROWS * CELL - 1
+	var n := 0
+	for x in range(BX, BX + COLS * CELL):
+		var i: int = y * SW + x
+		if sand[i] != 0:
+			if randf() < 0.5:
+				parts.append({"x": wx(x + 0.5), "y": wy(y + 1.0), "vx": (randf() - 0.5) * 40.0 * g / 6.0, "vy": 60.0 * g / 6.0,
+					"life": 0.0, "max": 0.6, "col": theme.gtint, "v": sand[i], "size": g * 1.1, "grav": 900.0 * g / 6.0, "kind": "grain"})
+			sand[i] = 0
+			grains -= 1
+			n += 1
+	if n > 0:
+		if dig_out == 0:
+			ui.toast("The debris is draining out!")
+			play("crack", 0.8, -4.0)
+			shake = 0.3
+		dig_out += n
+		sand_dirty = true
+		sand_sleep = false
+
+## How deep the debris has got: 0 at the top of the board, 100 at the bottom.
+func _dig_depth() -> int:
+	for y in range(BY + ROWS * CELL - 1, BY - 1, -1):
+		for x in range(BX, BX + COLS * CELL):
+			if sand[y * SW + x] != 0:
+				return clampi(roundi((y - BY + 1) * 100.0 / (ROWS * CELL)), 0, 100)
+	return 0
+
+## Sealed Chamber safety net: if the board is so dug out that no move is possible,
+## empty holes (ones the debris has not reached) get fresh gems.
+func _dig_refill() -> void:
+	ui.toast("Fresh gems!")
+	for id in dug.keys():
+		if _block_has_sand(id):
+			continue
+		dug.erase(id)
+		rubble.erase(id)
+		var c: int = id % COLS
+		var r: int = id / COLS
+		for y in range(BY + r * CELL, BY + (r + 1) * CELL):
+			for x in range(BX + c * CELL, BX + (c + 1) * CELL):
+				mask[y * SW + x] = 0
+		var m := _new_gem(c, r, randi() % NCOL)
+		m.scale = 0.0
+		grid[r][c] = m
+		tween(m, {"scale": 1.0}, 0.25, "back")
+	bg_layer.queue_redraw()
+	await wait(0.3)
 
 func _goal_left() -> int:
 	var n := runes.size()
@@ -1217,6 +1307,14 @@ func _door_off() -> float:
 
 # ---------- gravity / refill ----------
 func collapse() -> void:
+	if dig:
+		# nothing falls and nothing refills: every emptied tile is a hole for the debris
+		for r in ROWS:
+			for c in COLS:
+				if grid[r][c] == null and not is_rub(c, r):
+					_dig_cell(c, r)
+		await _wait_settled()
+		return
 	for c in COLS:
 		var r = ROWS - 1
 		while r >= 0:
@@ -1692,6 +1790,9 @@ func end_turn() -> void:
 		return
 	if find_move().is_empty() and has_special().x < 0:
 		await _shuffle()
+		if dig and find_move().is_empty() and has_special().x < 0:
+			await _dig_refill()
+			await _shuffle("Shuffling the board!")
 	state = "idle"
 	last_input = time
 
@@ -2080,7 +2181,8 @@ func _hammer_at(cell: Vector2i) -> void:
 func _tutorial_start() -> void:
 	if level_idx == 0 and not meta.seen("tut_swipe"):
 		var ms := all_moves()
-		ms.sort_custom(func(a, b): return _near_rub(a[0].x, a[0].y) + _near_rub(a[1].x, a[1].y) > _near_rub(b[0].x, b[0].y) + _near_rub(b[1].x, b[1].y))
+		var deep := 0.25 if dig else 0.0
+		ms.sort_custom(func(a, b): return _near_rub(a[0].x, a[0].y) + _near_rub(a[1].x, a[1].y) + deep * (a[0].y + a[1].y) > _near_rub(b[0].x, b[0].y) + _near_rub(b[1].x, b[1].y) + deep * (b[0].y + b[1].y))
 		if not ms.is_empty():
 			tut_move = ms[0]
 			ui.set_tip("Swipe a gem to make a line of 3. Matches next to the sand break it and free Zaki's door!")
@@ -2234,6 +2336,7 @@ func _sand_step() -> int:
 				moved += 1
 				continue
 			var d = 1 if (randi() & 1) == 1 else -1
+			var went := false
 			for _t in 2:
 				var nx = x + d
 				if nx >= ax0 and nx < ax1:
@@ -2242,8 +2345,26 @@ func _sand_step() -> int:
 						sand[j] = v
 						sand[i] = 0
 						moved += 1
+						went = true
 						break
 				d = -d
+			if dig and not went and y >= BY:
+				# in dug tunnels, debris on a flat floor creeps toward the nearest drop
+				for _t in 2:
+					var j2: int = i + d
+					var st := 1
+					while st <= 28 and mask[j2] == 1 and sand[j2] == 0:
+						if mask[j2 + SW] == 1 and sand[j2 + SW] == 0:
+							sand[i + d] = v
+							sand[i] = 0
+							moved += 1
+							went = true
+							break
+						j2 += d
+						st += 1
+					if went:
+						break
+					d = -d
 	sand_top = top_found
 	return moved
 
@@ -2326,6 +2447,7 @@ func _process(dt: float) -> void:
 				_update_hud()
 		if (state == "idle" or state == "busy") and trap != "":
 			# Sealed Chamber: the threat closes in with time, whatever the debris does
+			_dig_drain()
 			trap_stun = maxf(0.0, trap_stun - dt)
 			if trap_stun <= 0.0:
 				hz_p = clampf(hz_p + dt / trap_time, 0.0, 1.0)
@@ -2716,69 +2838,98 @@ func _spout_pos() -> Vector2:
 	var far = room.x0 if facing > 0 else room.x1
 	return Vector2(wx(far + facing * 3.4), wy(room.y0 + 5.5))
 
-## Sealed Chamber: a giant snake slides down from the ceiling toward Zaki.
+## Sealed Chamber: a giant snake pours out of a hole in the ceiling and winds down toward Zaki.
+## Its body gets longer as more of it comes out; the pattern on it slides along so it looks alive.
 func _draw_snake(ci: CanvasItem) -> void:
 	var far = room.x0 if facing > 0 else room.x1
-	var entry := Vector2(wx(far + facing * 4.0), wy(room.y0) - g * 3.0)
-	var head_from := Vector2(wx(far + facing * 6.5), wy(room.y0 + 6.5))
-	var head_to := Vector2(wx(hero_x - facing * 2.5), wy(BY - 10.5))
-	var e := hz_p * hz_p * (3.0 - 2.0 * hz_p)
-	var lunge := golem_attack if state == "lost" else 0.0
-	var head := head_from.lerp(head_to, e) + Vector2(sin(time * 1.7) * g * 0.8, sin(time * 2.3) * g * 0.4)
-	head = head.lerp(Vector2(wx(hero_x), wy(BY - 8.0)), lunge)
-	var ctrl := Vector2(lerpf(entry.x, head.x, 0.25) - facing * g * (3.0 + 4.0 * e), lerpf(entry.y, head.y, 0.75))
-	var r := g * 2.9
-	var green := Color("4f9a3a")
-	var dark := Color("2c6a2a")
-	var n := 26
-	var pts := []
+	var x_in: float = far + facing * 6.0            # where it comes through the ceiling (cells)
+	var y_in: float = area.y0 + 1.0                 # the real ceiling, high above the room
+	var drop: float = (BY - 8.5) - y_in             # how far it hangs before turning toward Zaki
+	var reach: float = absf((hero_x - facing * 3.5) - x_in)
+	var full: float = drop + 5.0 + reach
+	var lunge: float = golem_attack if state == "lost" else 0.0
+	var length: float = lerpf(9.0, full, hz_p) + lunge * 3.0
+	var r: float = g * 2.7
+	var step := 0.5
+	var n := int(length / step)
+	var target_ang: float = 0.0 if facing > 0 else PI
+	# walk the body from the ceiling down, bending toward Zaki after the drop
+	var pts := PackedVector2Array()
+	var dirs := PackedFloat32Array()
+	var p := Vector2(x_in, y_in - 2.0)
 	for i in n + 1:
-		var t := float(i) / n
-		var p := entry.lerp(ctrl, t).lerp(ctrl.lerp(head, t), t)
-		p.x += sin(t * 7.0 + time * 2.0) * g * 0.6 * (1.0 - t)
-		pts.append(p)
-	for i in n + 1:
-		ci.draw_circle(pts[i] + Vector2(0, g * 0.4), r * 1.08, dark)
-	for i in n + 1:
+		var sd := i * step
+		var turn := clampf((sd - drop) / 5.0, 0.0, 1.0)
+		turn = turn * turn * (3.0 - 2.0 * turn)
+		var ang := lerp_angle(PI / 2.0, target_ang, turn)
+		var tail := float(n - i) * step              # distance back from the head
+		ang += sin(tail * 0.55 + time * 2.4) * 0.38 * clampf(sd / 4.0, 0.0, 1.0) * (1.0 - 0.5 * turn)
+		pts.append(Vector2(wx(p.x), wy(p.y)))
+		dirs.append(ang)
+		p += Vector2.from_angle(ang) * step
+	# the hole it comes out of
+	var hole := Vector2(wx(x_in), wy(y_in - 0.3))
+	ci.draw_set_transform(hole, 0.0, Vector2(1.0, 0.45))
+	ci.draw_circle(Vector2.ZERO, r * 1.7, Color(0.05, 0.03, 0.02))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var green := Color("4c9c3c")
+	var dark := Color("2a632b")
+	var belly := Color("d9d27a")
+	# outline, body, then belly stripe and scales that travel with the body
+	ci.draw_polyline(pts, dark, r * 2.0 + g * 0.9, true)
+	for i in range(0, n + 1, 2):
+		ci.draw_circle(pts[i], r + g * 0.45, dark)
+	ci.draw_polyline(pts, green, r * 2.0, true)
+	for i in range(0, n + 1, 2):
 		ci.draw_circle(pts[i], r, green)
-	for i in range(0, n, 2):   # scales
-		ci.draw_arc(pts[i], r * 0.6, 0.3, PI - 0.3, 10, dark, maxf(1.5, g * 0.3), true)
-		ci.draw_circle(pts[i] + Vector2(-r * 0.35, -r * 0.35), r * 0.22, Color("86c95a"))
-	# head
-	var dir: Vector2 = (head - pts[n - 3]).normalized()
-	var side := Vector2(-dir.y, dir.x)
-	var open := clampf((hz_p - 0.7) / 0.3, 0.0, 1.0) * 0.5 + lunge * 0.4
-	var hc: Vector2 = head + dir * r * 0.8
-	ci.draw_set_transform(hc, dir.angle(), Vector2.ONE)
-	# lower jaw, mouth, upper head
-	ci.draw_set_transform(hc, dir.angle() + open, Vector2.ONE)
-	ci.draw_colored_polygon(PackedVector2Array([Vector2(-r * 1.2, 0), Vector2(r * 1.9, r * 0.25), Vector2(r * 1.6, r * 0.8), Vector2(-r * 1.0, r * 1.1)]), Color("e8dc9a"))
-	ci.draw_set_transform(hc, dir.angle(), Vector2.ONE)
+	# markings that travel with the body: dark diamonds down the back, light spots on the sides
+	for i in n + 1:
+		var tail := float(n - i) * step
+		var k := int(floor(tail / 2.0))
+		if absf(tail - k * 2.0) < step * 0.5 and tail > 1.5:
+			var fwd := Vector2.from_angle(dirs[i])
+			var side := Vector2(-fwd.y, fwd.x)
+			ci.draw_colored_polygon(PackedVector2Array([pts[i] + fwd * r * 0.7, pts[i] + side * r * 0.5, pts[i] - fwd * r * 0.7, pts[i] - side * r * 0.5]), dark)
+			ci.draw_circle(pts[i], r * 0.18, Color("7cc653"))
+			ci.draw_circle(pts[i] + side * r * 0.72 + fwd * r * 0.9, r * 0.16, belly)
+			ci.draw_circle(pts[i] - side * r * 0.72 + fwd * r * 0.9, r * 0.16, belly)
+	# rubble around the hole, drawn over the body so it reads as coming through the ceiling
+	for k in 5:
+		ci.draw_circle(hole + Vector2((k - 2) * r * 0.7, -r * 0.15 + (k % 2) * r * 0.2), r * 0.42, Color(0.36, 0.25, 0.14))
+	# head, seen from above: wide at the back, narrowing to the snout, turned toward Zaki
+	var ha := dirs[n]
+	var hr := r * 1.25
+	var hc: Vector2 = pts[n] + Vector2.from_angle(ha) * hr * 0.6
+	var open := clampf((hz_p - 0.75) / 0.25, 0.0, 1.0) + lunge
+	ci.draw_set_transform(hc, ha, Vector2.ONE)
+	if fmod(time, 1.4) < 0.5 and open < 0.1:
+		var tl := hr * (1.0 + sin(time * 30.0) * 0.2)
+		var tc := Color("d13a4a")
+		var tw := maxf(2.0, g * 0.4)
+		ci.draw_line(Vector2(hr * 1.6, 0), Vector2(hr * 1.6 + tl, 0), tc, tw)
+		ci.draw_line(Vector2(hr * 1.6 + tl, 0), Vector2(hr * 2.0 + tl, -hr * 0.3), tc, tw)
+		ci.draw_line(Vector2(hr * 1.6 + tl, 0), Vector2(hr * 2.0 + tl, hr * 0.3), tc, tw)
 	if open > 0.05:
-		ci.draw_colored_polygon(PackedVector2Array([Vector2(-r * 0.8, 0), Vector2(r * 1.8, 0), Vector2(r * 1.5, r * 0.9 * open * 2.0), Vector2(-r * 0.6, r * 0.5)]), Color("8a1f2a"))
-		for k in 2:
-			var fx_ := r * (1.2 + k * 0.4)
-			ci.draw_colored_polygon(PackedVector2Array([Vector2(fx_ - r * 0.12, 0), Vector2(fx_ + r * 0.12, 0), Vector2(fx_, r * 0.55)]), Color.WHITE)
+		# jaws opening: red mouth and two fangs poking past the snout
+		ci.draw_colored_polygon(PackedVector2Array([Vector2(hr * 0.6, -hr * 0.8), Vector2(hr * (1.7 + open * 0.7), -hr * 0.45), Vector2(hr * (1.7 + open * 0.7), hr * 0.45), Vector2(hr * 0.6, hr * 0.8)]), Color("8a1f2a"))
+		for sg in [-1.0, 1.0]:
+			ci.draw_colored_polygon(PackedVector2Array([Vector2(hr * 1.5, sg * hr * 0.5), Vector2(hr * 1.75, sg * hr * 0.32), Vector2(hr * (2.0 + open * 0.6), sg * hr * 0.42)]), Color.WHITE)
 	var skull := PackedVector2Array()
-	for k in 15:
-		var a := PI + PI * k / 14.0
-		skull.append(Vector2(cos(a) * r * 1.6 + r * 0.4, sin(a) * r * 1.25))
-	skull.append(Vector2(r * 2.1, r * 0.1))
-	skull.append(Vector2(-r * 1.2, r * 0.1))
+	for k in 25:
+		var a := TAU * k / 24.0
+		var rx := hr * (1.55 if cos(a) > 0.0 else 1.0)
+		var ry := hr * (1.12 - 0.35 * maxf(0.0, cos(a)))
+		skull.append(Vector2(cos(a) * rx + hr * 0.15, sin(a) * ry))
 	ci.draw_colored_polygon(skull, green)
-	ci.draw_polyline(skull, dark, maxf(1.5, g * 0.35), true)
-	# eye and nostril
-	var ey := Vector2(r * 0.9, -r * 0.55)
-	ci.draw_circle(ey, r * 0.38, Color("ffe14a"))
-	ci.draw_rect(Rect2(ey + Vector2(-r * 0.07, -r * 0.3), Vector2(r * 0.14, r * 0.6)), Color.BLACK)
-	ci.draw_line(ey + Vector2(-r * 0.5, -r * 0.5), ey + Vector2(r * 0.5, -r * 0.25), dark, maxf(2.0, g * 0.5), true)
-	ci.draw_circle(Vector2(r * 1.8, -r * 0.2), r * 0.08, dark)
-	# flicking tongue
-	if fmod(time, 1.6) < 0.5 and open < 0.1:
-		var tl := r * (1.0 + sin(time * 30.0) * 0.2)
-		ci.draw_line(Vector2(r * 2.0, r * 0.1), Vector2(r * 2.0 + tl, r * 0.15), Color("d13a4a"), maxf(1.5, g * 0.3))
-		ci.draw_line(Vector2(r * 2.0 + tl, r * 0.15), Vector2(r * 2.3 + tl, -r * 0.1), Color("d13a4a"), maxf(1.5, g * 0.3))
-		ci.draw_line(Vector2(r * 2.0 + tl, r * 0.15), Vector2(r * 2.3 + tl, r * 0.4), Color("d13a4a"), maxf(1.5, g * 0.3))
+	ci.draw_polyline(skull, dark, maxf(2.0, g * 0.5), true)
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(hr * 0.5, 0), Vector2(-hr * 0.1, hr * 0.3), Vector2(-hr * 0.7, 0), Vector2(-hr * 0.1, -hr * 0.3)]), dark)
+	for sg in [-1.0, 1.0]:
+		var ey := Vector2(hr * 0.75, sg * hr * 0.62)
+		ci.draw_circle(ey, hr * 0.3, Color("ffe14a"))
+		ci.draw_arc(ey, hr * 0.3, 0, TAU, 16, dark, maxf(1.5, g * 0.3), true)
+		ci.draw_rect(Rect2(ey + Vector2(-hr * 0.22, -hr * 0.06), Vector2(hr * 0.44, hr * 0.12)), Color.BLACK)
+		ci.draw_line(ey + Vector2(hr * 0.42, -sg * hr * 0.2), ey + Vector2(-hr * 0.35, sg * hr * 0.42), dark, maxf(2.5, g * 0.6), true)
+		ci.draw_circle(Vector2(hr * 1.5, sg * hr * 0.18), hr * 0.07, dark)
 	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_water(ci: CanvasItem) -> void:
@@ -3788,7 +3939,7 @@ func _bot_move() -> void:
 	var ms = all_moves()
 	if ms.is_empty():
 		return
-	ms.sort_custom(func(a, b): return _near_rub(a[0].x, a[0].y) + _near_rub(a[1].x, a[1].y) > _near_rub(b[0].x, b[0].y) + _near_rub(b[1].x, b[1].y))
+	ms.sort_custom(func(a, b): return _near_rub(a[0].x, a[0].y) + _near_rub(a[1].x, a[1].y) + (0.25 if dig else 0.0) * (a[0].y + a[1].y) > _near_rub(b[0].x, b[0].y) + _near_rub(b[1].x, b[1].y) + (0.25 if dig else 0.0) * (b[0].y + b[1].y))
 	await try_swap(ms[0][0], ms[0][1])
 
 func _run_autotest() -> void:
