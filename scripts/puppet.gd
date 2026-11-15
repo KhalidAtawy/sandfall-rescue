@@ -83,6 +83,3 @@ func place(foot_world: Vector2, s: float, dir: int) -> void:
 func front_offset(s: float) -> float:
 	# distance from the foot point to the leading edge, in world px
 	return (front - foot.x) * s
-
-func back_offset(s: float) -> float:
-	return foot.x * s

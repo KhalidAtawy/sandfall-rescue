@@ -28,6 +28,8 @@ WORLDS = [
 MODE_THEME = {"drain": "sand", "iron": "iron", "chain": "crystal", "crust": "emerald", "wrap": "tomb", "race": "temple",
               "jars": "tomb", "glass": "emerald", "runes": "sand", "curse": "crystal"}
 GOAL_BONUS = {"wrap": 2, "jars": 4, "glass": 4, "runes": 5, "curse": 4}   # extra moves for the mode's own goal
+# Sealed Chamber levels (the 5th and 8th of each world) and the threat each world uses
+TRAPS = ["snake", "water", "water", "lava", "snake", "snake", "water", "lava", "lava", "snake"]
 INFLOW = 1.5   # extra moves for the debris the source keeps pouring in
 PER_MOVE = {"drain": 104.0, "iron": 116.0, "chain": 110.0, "crust": 92.0, "wrap": 118.0}   # grains cleared per move, from play tests
 
@@ -204,6 +206,7 @@ def main(out_path):
                 "n": idx + 1, "world": wi, "name": wname, "mode": mode, "theme": theme,
                 "moves": moves, "time": time, "shaft": [s, s + w - 1], "room": side, "fill_top": 6,
                 "rubble": to_rects(rows), "hazard": boss_kind if is_boss else "spikes", "boss": is_boss,
+                "trap": TRAPS[wi] if li in (4, 7) else "",
             })
     worlds = [{"name": w[0], "theme": w[1], "boss": w[3], "mode": w[2] or ""} for w in WORLDS]
     with open(out_path, "w") as f:

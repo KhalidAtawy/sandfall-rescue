@@ -16,7 +16,6 @@ const GOLD := Color("f5c542")
 const GOLD_DEEP := Color("b9821c")
 const INK := Color("fff3dc")
 const INK_SOFT := Color("c9bba3")
-const PANEL := Color("231a3a")
 const PANEL_2 := Color("33265a")
 
 var game: Node
@@ -587,16 +586,12 @@ func set_level(n: int, title: String, col: Color) -> void:
 	ring.col = col
 	ring.queue_redraw()
 
-func update_time(sec: int) -> void:
-	time_label.text = "Time %d:%02d" % [sec / 60, sec % 60]
-	time_label.add_theme_color_override("font_color", Color("ff8f6b") if sec <= 15 else INK)
-
-func update_danger(p: float, pouring: bool) -> void:
+func update_danger(p: float, pouring: bool, label := "Danger") -> void:
 	if pouring:
 		time_label.text = "Debris incoming!"
 		time_label.add_theme_color_override("font_color", Color("ffb347"))
 	else:
-		time_label.text = "Danger %d%%" % roundi(p * 100.0)
+		time_label.text = "%s %d%%" % [label, roundi(p * 100.0)]
 		time_label.add_theme_color_override("font_color", Color("ff6b5b") if p > 0.7 else (Color("ffd36b") if p > 0.4 else INK))
 
 func set_extra(text: String) -> void:

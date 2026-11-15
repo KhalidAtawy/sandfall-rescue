@@ -5,14 +5,12 @@ extends Node2D
 
 const DrawLayer := preload("res://scripts/draw_layer.gd")
 const Ui := preload("res://scripts/ui.gd")
-const Rig := preload("res://scripts/rig.gd")
 const RigData := preload("res://scripts/rig_data.gd")
 const Puppet := preload("res://scripts/puppet.gd")
 const FramesData := preload("res://scripts/frames_data.gd")
 const LevelsData := preload("res://scripts/levels_data.gd")
 const Meta := preload("res://scripts/meta.gd")
 const HERO_H := 15.0      # hero height in world cells
-const HERO_PX := 1126.0   # hero height in rig pixels
 const ROOM_H := 24
 const SPIKE_W := 6.0
 const DOOR_EDGE_W := 2.6   # side view of the door, in cells
@@ -31,7 +29,6 @@ const MODES := {
 	"curse": {"title": "Creeping Curse", "text": "A golden curse grabs gems, and it spreads to a new gem every move you don't break any cover. Lift the whole curse and clear the door."},
 }
 const WRAP_COUNT := 7
-const RACE_BONUS := 3.0
 const CHASER_H := {"golem": 20.0, "mummy": 19.0, "cobra": 17.0}
 
 const COLS := 8
@@ -57,7 +54,6 @@ const MODE_SHORT := {
 	"runes": "Light every sun rune.",
 	"curse": "Stop the curse before it spreads.",
 }
-const BOSS_NAMES := {"golem": "The Rock Golem", "mummy": "The Mummy", "cobra": "The Giant Cobra"}
 ## One boss per world. "base" is the puppet used until the boss has its own art
 ## (assets/gfx/bosses/<kind>.png); "attacks" take turns every few moves.
 const BOSSES := {
@@ -80,6 +76,18 @@ const ATTACK_TEXT := {
 	"gold": "turns gems to gold!", "curse": "casts a creeping curse!",
 }
 const BOSS_EVERY := 3
+## "Sealed Chamber" levels: Zaki is locked in with a threat (snake, rising water, creeping lava)
+## that closes in over time. Set this to false to turn the whole mode off; those levels
+## then play as normal levels.
+const SEALED_CHAMBER_ON := true
+const TRAP_INFO := {
+	"snake": {"name": "giant snake", "hud": "Snake", "lose": "The snake got Zaki!",
+		"text": "SEALED CHAMBER! Zaki is locked in with a giant snake sliding down from the ceiling. It gets closer every second. Drain the debris behind the door before it reaches him. Setting off a power-up makes the snake flinch."},
+	"water": {"name": "rising water", "hud": "Water", "lose": "The water rose too high!",
+		"text": "SEALED CHAMBER! The room is flooding and the water keeps rising. Drain the debris behind the door before it goes over Zaki's head. Setting off a power-up holds the water for a moment."},
+	"lava": {"name": "creeping lava", "hud": "Lava", "lose": "The lava reached Zaki!",
+		"text": "SEALED CHAMBER! Lava is creeping across the floor toward Zaki. Drain the debris behind the door before it touches him. Setting off a power-up holds the lava for a moment."},
+}
 ## Gem covers: a covered gem is stuck. Matching next to it (or blasting it) removes one layer.
 const COVER_HP := {"bandage": 1, "sand": 1, "web": 1, "magma": 1, "venom": 1, "glass": 2, "gold": 2, "curse": 1, "jar": 2}
 const COVER_COL := {"bandage": Color("efe2c4"), "sand": Color("e0b46a"), "web": Color("f2f2ff"), "magma": Color("ff7a2a"),
@@ -191,7 +199,6 @@ var jit_i := 0
 var chasers := {}
 var hz_layer: Node2D
 var hz_p := 0.0
-var hz_target := 0.0
 var hero_x := 0.0        # hip x in world cells
 var hero_lift := 0.0     # world cells above the floor (jumps, escape)
 var hero_alpha := 1.0
@@ -199,7 +206,6 @@ var look_t := 0.0
 var look_cd := 3.0
 var blink_t := 2.0
 var chaser_phase := 0.0
-var time_left := 100.0
 # --- pressure: debris pushed in by a source shoves Zaki back toward the spikes ---
 var shaft_cap := 1          # cells in the shaft area behind the door
 var push_time := 60.0       # seconds to reach the spikes if the shaft stays full and nobody plays
@@ -207,6 +213,9 @@ var pour_left := 0.0        # seconds of pouring left in the current burst
 var pour_rate := 0.0        # grains per second while pouring
 var pour_mul := 1.0         # how hard the current burst hits (boss slams hit harder)
 var last_grains := 0        # to see how much debris the player just destroyed
+var trap := ""              # "", "snake", "water" or "lava": the Sealed Chamber threat on this level
+var trap_time := 120.0      # seconds until the threat reaches Zaki
+var trap_stun := 0.0        # seconds the threat is held back after a power-up
 var relief := 0.0           # ground Zaki is still winning back after the player cleared debris
 var pour_cd := 0.0          # seconds until the next burst
 var pour_acc := 0.0
@@ -224,8 +233,6 @@ var flinch := 0.0
 var pound_prev := 0.0
 var door_hit := 0.0
 var sweat_t := 1.0
-var hand_f := Vector2.ZERO
-var hand_b := Vector2.ZERO
 var hud_sec := -1
 var level_gen := 0
 var mode := "drain"
@@ -527,16 +534,17 @@ func start_level(i: int) -> void:
 	tweens.clear()
 	hero_pose = "push"
 	hz_p = 0.0
-	hz_target = 0.0
 	hero_x = _door_face() - facing * 3.9
 	door_swing = 0.0
 	safe_glow = 0.0
 	level_gen += 1
 	hero_alpha = 1.0
-	time_left = float(L.time)
 	push_time = float(L.get("push", L.time / 4.0))
 	pour_rate = shaft_cap * 0.07 / 2.5
-	pour_left = 3.0          # the source is still pouring when the level starts
+	trap = str(L.get("trap", "")) if SEALED_CHAMBER_ON and not L.boss else ""
+	trap_time = L.moves * 5.0 + 30.0
+	trap_stun = 0.0
+	pour_left = 3.0 if trap == "" else 0.0   # the source is still pouring when the level starts
 	pour_mul = 1.0
 	relief = 0.0
 	pour_cd = _pour_period()
@@ -1201,7 +1209,11 @@ func pour_burst(sec: float, rate_mul := 1.0) -> void:
 
 ## Where Zaki's hands are: the door face, minus how far the debris has pushed him back.
 func _push_face() -> float:
-	return _door_face() - facing * hz_p * push_max
+	return _door_face() + _door_off()
+
+## How far the debris has shoved the door into the room (never in a Sealed Chamber).
+func _door_off() -> float:
+	return 0.0 if trap != "" else -facing * hz_p * push_max
 
 # ---------- gravity / refill ----------
 func collapse() -> void:
@@ -1325,7 +1337,7 @@ func _resolve_clusters(cls: Array) -> void:
 			_power_tip(kind)
 			if mode == "race":
 				hz_p = maxf(0.0, hz_p - 0.015)
-				ui.toast("+%d seconds!" % int(RACE_BONUS))
+				ui.toast("Zaki pushes back!")
 			var m: Gem = grid[spawn / COLS][spawn % COLS]
 			m.dying = true
 			tween(m, {"scale": 0.0}, 0.12)
@@ -1478,6 +1490,8 @@ func _spawn_fx(s: Dictionary) -> void:
 		buzz(30)
 
 func detonate(seeds: Array) -> void:
+	if trap != "" and not seeds.is_empty() and state != "won":
+		trap_stun = maxf(trap_stun, 1.5)
 	var hit := {}
 	var rub := {}
 	var triggered := {}
@@ -1709,8 +1723,9 @@ func _win() -> void:
 	ui.set_tip("")
 	var ratio: float = (1.0 - hz_p) if mode == "race" else float(moves) / float(L.moves)
 	var win_stars: int = 3 if ratio >= 0.3 else (2 if ratio >= 0.12 else 1)
-	var moves_left: int = int(time_left) if mode == "race" else moves
-	var left_bonus: int = int(time_left / 5.0) if mode == "race" else moves
+	var race_bonus := int((1.0 - hz_p) * 10.0)   # race levels reward keeping Zaki far from danger
+	var moves_left: int = race_bonus if mode == "race" else moves
+	var left_bonus: int = race_bonus if mode == "race" else moves
 	var fired := await _bonus_rockets(mini(left_bonus, 12), gen)
 	if gen != level_gen:
 		return
@@ -1792,8 +1807,6 @@ func _bonus_rockets(count: int, gen: int) -> int:
 		play("shine", 1.0 + k * 0.05, -9.0)
 		if mode != "race":
 			moves = maxi(0, moves - 1)
-		else:
-			time_left = maxf(0.0, time_left - 5.0)
 		_update_hud()
 		await wait(0.1)
 	for k in count:
@@ -1867,7 +1880,7 @@ func _lose(timed_out := false) -> void:
 	var left = ceili(shaft_sand * 100.0 / shaft0) if shaft_sand > 0 else 0
 	meta.log_event("level_end", {"level": level_idx + 1, "mode": mode, "result": "lost", "moves_left": 0,
 		"sand_left": left, "seconds": int(time - level_t0), "boosters": boosters_used, "timed_out": timed_out}, self)
-	ui.show_lose(left, "Out of moves!" if not timed_out else ("The boss got Zaki!" if L.boss else "Pushed into the spikes!"))
+	ui.show_lose(left, "Out of moves!" if not timed_out else (TRAP_INFO[trap].lose if trap != "" else ("The boss got Zaki!" if L.boss else "Pushed into the spikes!")))
 
 func plus_five() -> void:
 	if not meta.use_booster("moves5"):
@@ -1925,7 +1938,12 @@ func select_level(i: int) -> void:
 		for a in bd.attacks:
 			acts.append(ATTACK_TEXT[a].split("!")[0])
 		text = bd.name + " waits behind Zaki instead of the spikes, and every %d moves it %s. " % [BOSS_EVERY, " or ".join(acts)] + text
-	ui.show_intro(i, lv.boss, MODES[m].title, text, load(badge) if ResourceLoader.exists(badge) else null)
+	var title: String = MODES[m].title
+	var tk := str(lv.get("trap", "")) if SEALED_CHAMBER_ON and not lv.boss else ""
+	if tk != "":
+		title = "Sealed Chamber"
+		text = TRAP_INFO[tk].text + "\n\n" + MODE_SHORT[m]
+	ui.show_intro(i, lv.boss, title, text, load(badge) if ResourceLoader.exists(badge) else null)
 
 func begin_level(i: int, pre: Array) -> void:
 	meta.mark("mode_" + LEVELS[i].mode)
@@ -2123,9 +2141,6 @@ func resume() -> void:
 	state = "idle"
 	last_input = time
 
-func level_unlocked(i: int) -> bool:
-	return meta.unlocked(i)
-
 # ---------- input ----------
 var down_cell := Vector2i(-1, -1)
 var down_pos := Vector2.ZERO
@@ -2309,8 +2324,18 @@ func _process(dt: float) -> void:
 			var pc := maxi(0, ceili(shaft_sand * 100.0 / shaft0))
 			if pc != hud_pct:
 				_update_hud()
-		if state == "idle" or state == "busy":
-			time_left = maxf(0.0, time_left - dt)
+		if (state == "idle" or state == "busy") and trap != "":
+			# Sealed Chamber: the threat closes in with time, whatever the debris does
+			trap_stun = maxf(0.0, trap_stun - dt)
+			if trap_stun <= 0.0:
+				hz_p = clampf(hz_p + dt / trap_time, 0.0, 1.0)
+			last_grains = grains
+			if state == "idle" and goal_done():
+				_win()
+			elif state == "idle" and hz_p >= 1.0:
+				state = "busy"
+				_lose(true)
+		elif state == "idle" or state == "busy":
 			_pour(dt)
 			pour_cd -= dt
 			if pour_cd <= 0.0 and not door_ready():
@@ -2333,7 +2358,7 @@ func _process(dt: float) -> void:
 		var dp := roundi(hz_p * 100.0) * 2 + (1 if pour_left > 0.0 else 0)
 		if dp != danger_shown:
 			danger_shown = dp
-			ui.update_danger(hz_p, pour_left > 0.0)
+			ui.update_danger(hz_p, pour_left > 0.0, TRAP_INFO[trap].hud if trap != "" else "Danger")
 		sand_sfx_t -= dt
 		if mv > 25 and sand_sfx_t <= 0.0:
 			play("sand", 0.9 + randf() * 0.2, -14.0)
@@ -2399,58 +2424,6 @@ func _place_hero() -> void:
 	_anim(0.0)
 
 # ---------- characters: bone-rig animation ----------
-const PUSH_POSE := {"torso": 0.28, "head": -0.22, "arm_up_f": -1.75, "arm_lo_f": 0.25, "arm_up_b": -1.6, "arm_lo_b": 0.2,
-	"leg_up_f": -0.5, "leg_lo_f": 0.25, "leg_up_b": 0.2, "leg_lo_b": 0.08}
-
-func _hero_target(t: float) -> Dictionary:
-	var st := hero_strain
-	match hero_pose:
-		"push":
-			var dz := hz_p
-			var heave := 0.5 + 0.5 * sin(push_ph)
-			var panic := clampf((dz - 0.7) / 0.3, 0.0, 1.0)
-			var shake_k := sin(t * 42.0) * 0.035 * clampf((dz - 0.4) * 2.5, 0.0, 1.0)
-			var d := {"torso": 0.2 + heave * 0.1 * (1.0 - panic) + dz * 0.05 + shake_k * 0.5,
-				"head": -0.18 + heave * 0.06,
-				"leg_up_f": -0.48, "leg_lo_f": 0.28 + shake_k,
-				"leg_up_b": 0.24 + heave * 0.08 * (1.0 - panic), "leg_lo_b": 0.05 - shake_k}
-			if look_t > 0.0 or flinch > 0.0:
-				d.torso -= 0.14
-				d.head = 0.32
-			return d
-		"scared":
-			var w := sin(t * 38.0) * 0.05
-			return {"torso": -0.15 + w, "head": 0.25, "arm_up_f": -2.0, "arm_lo_f": -0.9 + w, "arm_up_b": -2.2, "arm_lo_b": -0.8 - w,
-				"leg_up_f": 0.25, "leg_lo_f": 0.15, "leg_up_b": -0.1, "leg_lo_b": 0.2}
-		"cheer":
-			var wv := sin(t * 9.0) * 0.25
-			return {"torso": -0.05, "head": -0.1, "arm_up_f": 2.55 + wv, "arm_lo_f": -0.35, "arm_up_b": -2.6 - wv, "arm_lo_b": 0.3,
-				"leg_up_f": -0.15, "leg_lo_f": 0.1, "leg_up_b": 0.12, "leg_lo_b": 0.05}
-		"run":
-			var ph := t * 13.0
-			var sw := sin(ph)
-			var lean := 0.22
-			return {"torso": lean, "head": -0.18, "arm_up_f": -sw * 1.0 - lean, "arm_lo_f": -1.1, "arm_up_b": sw * 1.0 - lean, "arm_lo_b": -1.1,
-				"leg_up_f": sw * 0.8 - lean, "leg_lo_f": maxf(0.0, -cos(ph)) * 1.1, "leg_up_b": -sw * 0.8 - lean, "leg_lo_b": maxf(0.0, cos(ph)) * 1.1}
-		"jump":
-			return {"torso": -0.1, "head": -0.3, "arm_up_f": 2.7, "arm_lo_f": -0.2, "arm_up_b": -2.8, "arm_lo_b": 0.2,
-				"leg_up_f": -0.5, "leg_lo_f": 0.9, "leg_up_b": 0.3, "leg_lo_b": 0.7}
-	return {}
-
-func _hero_face() -> String:
-	if hero_pose == "push" and (flinch > 0.0 or (hz_p > 0.75 and look_t > 0.0)):
-		return "scared"
-	match hero_pose:
-		"scared":
-			return "scared"
-		"cheer", "run", "jump":
-			return "happy"
-	if look_t > 0.0:
-		return "look" if hz_p < 0.75 else "scared"
-	if blink_t < 0.12:
-		return "blink"
-	var heave := 0.5 + 0.5 * sin(push_ph)
-	return "strain" if heave > 0.55 or hz_p > 0.45 else "neutral"
 
 func _chaser_target(kind: String, t: float, speed: float) -> Dictionary:
 	var ph := chaser_phase
@@ -2585,34 +2558,6 @@ func _hero_frames(dt: float) -> void:
 			parts.append({"x": hp.x, "y": hp.y, "vx": -facing * (20.0 + randf() * 40.0), "vy": -40.0, "life": 0.0, "max": 0.7,
 				"col": Color(0.7, 0.88, 1.0, 0.9), "size": g * 0.35, "grav": 600.0, "kind": "dot"})
 
-## Position along a there-and-back loop of n frames: x = frame, y = next frame, z = blend 0..1.
-func _pingpong(p: float, n: int) -> Vector3:
-	var period := 2 * (n - 1)
-	var q := fmod(p, float(period))
-	var i := int(q)
-	var a: int = i if i < n else period - i
-	var j := (i + 1) % period
-	var b: int = j if j < n else period - j
-	return Vector3(a, b, q - float(i))
-
-func _place_blend(key: String, nxt: int, blend: float, by_hand: bool, s: float, floor_y: float, shake_px: float) -> void:
-	if nxt < 0 or blend <= 0.02:
-		hero_b.visible = false
-		return
-	var f: Dictionary = FramesData.FRAMES[key][nxt]
-	hero_b.visible = true
-	hero_b.texture = frame_tex[key][nxt]
-	hero_b.scale = Vector2(s, s)
-	hero_b.flip_h = facing < 0
-	var w: float = f.w
-	var ax: float = f.hand if by_hand else f.foot[0]
-	var world_x: float = wx(_push_face()) + facing * 2.0 if by_hand else wx(hero_x)
-	var axm: float = ax if facing > 0 else w - ax
-	hero_b.position = Vector2(world_x - axm * s + shake_px, floor_y - float(f.foot[1]) * s)
-	# ease the blend so each pose holds a moment before it melts into the next
-	var e := blend * blend * (3.0 - 2.0 * blend)
-	hero_b.modulate.a = hero_alpha * e
-
 const BOSS_H := 21.0
 
 func _hazard_width() -> float:
@@ -2710,13 +2655,16 @@ func _draw_hazard(ci: CanvasItem) -> void:
 	if room.is_empty():
 		return
 	_draw_door(ci)
-	match L.get("hazard", ""):
-		"spikes":
-			_draw_spike_wall(ci)
+	match trap:
+		"snake":
+			_draw_snake(ci)
 		"water":
 			_draw_water(ci)
 		"lava":
 			_draw_lava(ci)
+		_:
+			if L.get("hazard", "") == "spikes":
+				_draw_spike_wall(ci)
 
 ## When the debris shoves the door into the room, it fills the gap behind the door.
 func _draw_push_debris(ci: CanvasItem, off: float) -> void:
@@ -2767,6 +2715,71 @@ func _draw_spike_wall(ci: CanvasItem) -> void:
 func _spout_pos() -> Vector2:
 	var far = room.x0 if facing > 0 else room.x1
 	return Vector2(wx(far + facing * 3.4), wy(room.y0 + 5.5))
+
+## Sealed Chamber: a giant snake slides down from the ceiling toward Zaki.
+func _draw_snake(ci: CanvasItem) -> void:
+	var far = room.x0 if facing > 0 else room.x1
+	var entry := Vector2(wx(far + facing * 4.0), wy(room.y0) - g * 3.0)
+	var head_from := Vector2(wx(far + facing * 6.5), wy(room.y0 + 6.5))
+	var head_to := Vector2(wx(hero_x - facing * 2.5), wy(BY - 10.5))
+	var e := hz_p * hz_p * (3.0 - 2.0 * hz_p)
+	var lunge := golem_attack if state == "lost" else 0.0
+	var head := head_from.lerp(head_to, e) + Vector2(sin(time * 1.7) * g * 0.8, sin(time * 2.3) * g * 0.4)
+	head = head.lerp(Vector2(wx(hero_x), wy(BY - 8.0)), lunge)
+	var ctrl := Vector2(lerpf(entry.x, head.x, 0.25) - facing * g * (3.0 + 4.0 * e), lerpf(entry.y, head.y, 0.75))
+	var r := g * 2.9
+	var green := Color("4f9a3a")
+	var dark := Color("2c6a2a")
+	var n := 26
+	var pts := []
+	for i in n + 1:
+		var t := float(i) / n
+		var p := entry.lerp(ctrl, t).lerp(ctrl.lerp(head, t), t)
+		p.x += sin(t * 7.0 + time * 2.0) * g * 0.6 * (1.0 - t)
+		pts.append(p)
+	for i in n + 1:
+		ci.draw_circle(pts[i] + Vector2(0, g * 0.4), r * 1.08, dark)
+	for i in n + 1:
+		ci.draw_circle(pts[i], r, green)
+	for i in range(0, n, 2):   # scales
+		ci.draw_arc(pts[i], r * 0.6, 0.3, PI - 0.3, 10, dark, maxf(1.5, g * 0.3), true)
+		ci.draw_circle(pts[i] + Vector2(-r * 0.35, -r * 0.35), r * 0.22, Color("86c95a"))
+	# head
+	var dir: Vector2 = (head - pts[n - 3]).normalized()
+	var side := Vector2(-dir.y, dir.x)
+	var open := clampf((hz_p - 0.7) / 0.3, 0.0, 1.0) * 0.5 + lunge * 0.4
+	var hc: Vector2 = head + dir * r * 0.8
+	ci.draw_set_transform(hc, dir.angle(), Vector2.ONE)
+	# lower jaw, mouth, upper head
+	ci.draw_set_transform(hc, dir.angle() + open, Vector2.ONE)
+	ci.draw_colored_polygon(PackedVector2Array([Vector2(-r * 1.2, 0), Vector2(r * 1.9, r * 0.25), Vector2(r * 1.6, r * 0.8), Vector2(-r * 1.0, r * 1.1)]), Color("e8dc9a"))
+	ci.draw_set_transform(hc, dir.angle(), Vector2.ONE)
+	if open > 0.05:
+		ci.draw_colored_polygon(PackedVector2Array([Vector2(-r * 0.8, 0), Vector2(r * 1.8, 0), Vector2(r * 1.5, r * 0.9 * open * 2.0), Vector2(-r * 0.6, r * 0.5)]), Color("8a1f2a"))
+		for k in 2:
+			var fx_ := r * (1.2 + k * 0.4)
+			ci.draw_colored_polygon(PackedVector2Array([Vector2(fx_ - r * 0.12, 0), Vector2(fx_ + r * 0.12, 0), Vector2(fx_, r * 0.55)]), Color.WHITE)
+	var skull := PackedVector2Array()
+	for k in 15:
+		var a := PI + PI * k / 14.0
+		skull.append(Vector2(cos(a) * r * 1.6 + r * 0.4, sin(a) * r * 1.25))
+	skull.append(Vector2(r * 2.1, r * 0.1))
+	skull.append(Vector2(-r * 1.2, r * 0.1))
+	ci.draw_colored_polygon(skull, green)
+	ci.draw_polyline(skull, dark, maxf(1.5, g * 0.35), true)
+	# eye and nostril
+	var ey := Vector2(r * 0.9, -r * 0.55)
+	ci.draw_circle(ey, r * 0.38, Color("ffe14a"))
+	ci.draw_rect(Rect2(ey + Vector2(-r * 0.07, -r * 0.3), Vector2(r * 0.14, r * 0.6)), Color.BLACK)
+	ci.draw_line(ey + Vector2(-r * 0.5, -r * 0.5), ey + Vector2(r * 0.5, -r * 0.25), dark, maxf(2.0, g * 0.5), true)
+	ci.draw_circle(Vector2(r * 1.8, -r * 0.2), r * 0.08, dark)
+	# flicking tongue
+	if fmod(time, 1.6) < 0.5 and open < 0.1:
+		var tl := r * (1.0 + sin(time * 30.0) * 0.2)
+		ci.draw_line(Vector2(r * 2.0, r * 0.1), Vector2(r * 2.0 + tl, r * 0.15), Color("d13a4a"), maxf(1.5, g * 0.3))
+		ci.draw_line(Vector2(r * 2.0 + tl, r * 0.15), Vector2(r * 2.3 + tl, -r * 0.1), Color("d13a4a"), maxf(1.5, g * 0.3))
+		ci.draw_line(Vector2(r * 2.0 + tl, r * 0.15), Vector2(r * 2.3 + tl, r * 0.4), Color("d13a4a"), maxf(1.5, g * 0.3))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _draw_water(ci: CanvasItem) -> void:
 	var x0 := wx(room.x0)
@@ -2829,8 +2842,8 @@ func _draw_water(ci: CanvasItem) -> void:
 
 func _draw_lava(ci: CanvasItem) -> void:
 	var far = room.x0 if facing > 0 else room.x1
-	var front := _hazard_front()
-	var h := 2.2 + hz_p * 2.8
+	var front: float = lerpf(far + facing * 2.0, hero_x - facing * 1.5, hz_p)
+	var h := 3.2 + hz_p * 2.6
 	var sp := _spout_pos()
 	var px := sp.x
 	var py := sp.y + g * 1.2
@@ -2984,7 +2997,7 @@ func _draw_frame_inner(ci: CanvasItem) -> void:
 	_tile_h(ci, tex.frieze, wx(BX - 0.8), wx(BX + COLS * CELL + 0.8), wy(BY - 0.75), g * 1.5)
 
 func _draw_door(ci: CanvasItem) -> void:
-	var off := -facing * hz_p * push_max
+	var off := _door_off()
 	_draw_push_debris(ci, off)
 	var x = wx(door_col + 0.5 + off)
 	var top = wy(room.y0) + g * 0.8
@@ -3096,9 +3109,6 @@ func _draw_gems(ci: CanvasItem) -> void:
 			if wrapped.has(r * COLS + c):
 				_draw_cover(ci, center, s, wrapped[r * COLS + c], c, r)
 
-func _draw_bandage(ci: CanvasItem, c: Vector2, s: float) -> void:
-	_draw_tex_centered(ci, tex.fx_bandage, c, Vector2(s, s) * 1.08)
-
 func _draw_crust(ci: CanvasItem) -> void:
 	var sz := CELL * g
 	for id in crust:
@@ -3108,7 +3118,7 @@ func _draw_crust(ci: CanvasItem) -> void:
 		_draw_tex_centered(ci, tex.fx_crust, Vector2(cell_cx(c), cell_cy(r)), Vector2(sz, sz) * 1.02, 0.0, Color(glow, glow, glow))
 
 func _draw_fx(ci: CanvasItem) -> void:
-	if not shaft.is_empty() and not L.is_empty():
+	if not shaft.is_empty() and not L.is_empty() and trap == "":
 		_draw_source(ci)
 	if mode == "crust":
 		_draw_crust(ci)
