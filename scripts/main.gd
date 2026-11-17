@@ -23,6 +23,7 @@ const MODES := {
 	"crust": {"title": "Cooling Lava", "text": "Lava left alone for 6 moves cools into crust. Crust needs one extra hit."},
 	"wrap": {"title": "Bandaged Gems", "text": "Bandaged gems are stuck. Match next to them to tear the bandages off."},
 	"race": {"title": "Cobra Race", "text": "No move limit, but the debris never stops. Be quick!"},
+	"collect": {"title": "Gem Lock", "text": "No sand here! The door has a gem lock. Match the gems shown at the top to fill it and open the door."},
 	"jars": {"title": "Canopic Jars", "text": "Match next to a jar twice to break it. Each jar hides a rocket."},
 	"glass": {"title": "Obsidian Glass", "text": "Gems in black glass need two matches next to them to break free."},
 	"runes": {"title": "Sun Runes", "text": "Clear the gems on top of the glowing runes to light them."},
@@ -49,6 +50,7 @@ const MODE_SHORT := {
 	"crust": "Untouched lava cools into crust.",
 	"wrap": "Free the bandaged gems too.",
 	"race": "No move limit. Be quick!",
+	"collect": "Collect the gems shown at the top to open the door.",
 	"jars": "Break every jar. Each hides a rocket.",
 	"glass": "Shatter the obsidian glass (2 hits).",
 	"runes": "Light every sun rune.",
@@ -231,7 +233,17 @@ var danger_shown := -1
 var mound_col := Color(0.8, 0.65, 0.4)
 var shaft_sand := 0
 var shaft0 := 1
-var door_sand := 0          # grains touching the door: these are what hold it shut
+var door_sand := 0          # grains touching the door
+var area_sand := 0          # all the debris on the far side of the door: the door opens when almost none is left
+var area0 := 1
+var collect := false        # "Gem Lock" levels: no debris, collect gems to open the door
+var need := [0, 0, 0, 0]
+var got := [0, 0, 0, 0]
+var bonus := false          # bonus round: no debris, every matched gem is a coin for Zaki's bag
+var bonus_coins := 0
+var bonus_world := 0
+var regen_t := 0.0          # Sealed Chamber: time until the next dug tile grows back
+var help_t := 0.0
 var door0 := 1
 var dig_path_t := 0.0       # Sealed Chamber: how long a finished path has gone without draining
 var dig_check := 0.0
@@ -380,6 +392,7 @@ func _load_textures() -> void:
 		tex[n] = load("res://assets/gfx/props/%s.png" % n)
 	tex.pillar = load("res://assets/gfx/stone/pillar.png")
 	tex.hand = load("res://assets/gfx/ui/hand.png")
+	tex.coin = load("res://assets/gfx/ui/coin.png")
 	# each world can have its own board tile (assets/gfx/board/tile_<world>.png)
 	for w in WORLDS.size():
 		var tp := "res://assets/gfx/board/tile_%d.png" % (w + 1)
@@ -481,10 +494,15 @@ func wy(y: float) -> float:
 	return oy + y * g
 
 # ---------- level setup ----------
-func start_level(i: int) -> void:
+func start_level(i: int, override := {}) -> void:
 	level_idx = i
-	L = LEVELS[i]
+	L = override if not override.is_empty() else LEVELS[i]
 	theme = THEMES[L.theme]
+	collect = str(L.get("mode", "")) == "collect"
+	bonus = str(L.get("mode", "")) == "bonus"
+	bonus_coins = 0
+	got = [0, 0, 0, 0]
+	need = L.get("collect", [0, 0, 0, 0]).duplicate()
 	rubble.clear()
 	for rect in L.rubble:
 		for r in range(rect[2], rect[3] + 1):
@@ -497,6 +515,8 @@ func start_level(i: int) -> void:
 	dig_out = 0
 	dig_path_t = 0.0
 	dig_check = 0.0
+	regen_t = 5.0
+	help_t = 0.0
 	if dig:
 		# the debris only just reaches into the board: the player digs the rest of the way down
 		for id in rubble.keys():
@@ -504,6 +524,8 @@ func start_level(i: int) -> void:
 				rubble.erase(id)
 		for c in range(c0, c1 + 1):
 			rubble[c] = true
+	if collect or bonus:
+		rubble.clear()   # no debris anywhere: a full board of gems
 	_fill_pockets()
 	shaft = {"x0": BX + c0 * CELL, "x1": BX + (c1 + 1) * CELL, "y0": 3}
 	if L.room == "left":
@@ -525,7 +547,7 @@ func start_level(i: int) -> void:
 	for y in range(area.y0, BY):
 		for x in range(area.x0, area.x1):
 			mask[y * SW + x] = 1
-			if y >= area.y0 + 7:
+			if y >= area.y0 + 7 and not (collect or bonus):
 				sand[y * SW + x] = 1 + randi() % 3
 				grains += 1
 				if x < shaft.x0 or x >= shaft.x1:
@@ -543,6 +565,7 @@ func start_level(i: int) -> void:
 	shaft0 = shaft_cap
 	shaft_sand = _count_shaft()
 	door0 = maxi(1, door_sand)
+	area0 = maxi(1, area_sand)
 	last_grains = grains
 	_compute_active_region()
 	# the wider debris area holds more sand; most of it slides into the drain, so give moves for it
@@ -567,7 +590,7 @@ func start_level(i: int) -> void:
 	trap = str(L.get("trap", "")) if SEALED_CHAMBER_ON and not L.boss else ""
 	trap_time = (45.0 + L.moves * 2.0 - 2.0 * float(L.get("world", 0))) if dig else (L.moves * 5.0 + 30.0)
 	trap_stun = 0.0
-	pour_left = 3.0 if trap == "" else 0.0   # the source is still pouring when the level starts
+	pour_left = 3.0 if trap == "" and not (collect or bonus) else 0.0   # the source is still pouring when the level starts
 	pour_mul = 1.0
 	relief = 0.0
 	pour_cd = _pour_period()
@@ -614,6 +637,16 @@ func start_level(i: int) -> void:
 	frame_layer.queue_redraw()
 	ui.set_level(i + 1, BOSSES[L.hazard].name if L.boss else L.name, theme.ui)
 	mode = "drain" if dig else L.get("mode", "drain")
+	if bonus:
+		hero_pose = "bag"
+		hero_x = (room.x0 + room.x1) * 0.5
+	ui.set_goals(need if collect else [], tex.gems)
+	ui.set_bonus(bonus)
+	ui.set_ring_caption("TO DIG" if dig else "SAND LEFT")
+	var threat_t: Texture2D = null
+	if boss_kind != "":
+		threat_t = boss_tex if boss_tex != null else load("res://assets/gfx/chasers/%s.png" % boss_base)
+	ui.set_threat(trap if trap != "" else ("boss" if boss_kind != "" else "spikes"), threat_t)
 	wrapped.clear()
 	runes.clear()
 	raised.clear()
@@ -954,6 +987,14 @@ func sparkle(x: float, y: float, n := 4) -> void:
 
 func _pop_gem(m: Gem, delay := 0.0) -> float:
 	m.dying = true
+	var from := Vector2(cell_cx(int(round(m.x))), cell_cy(int(round(m.y))))
+	if collect and m.kind == "gem" and got[m.color] < need[m.color]:
+		got[m.color] += 1
+		var k: int = m.color
+		_fly(from, tex.gems[k], delay, func(): ui.set_goals(need, tex.gems, got))
+	elif bonus and state != "won" and m.kind != "gem":
+		bonus_coins += 1          # setting off a power-up is worth a coin too
+		_fly(from, tex.coin, delay, func(): ui.set_bonus(true, bonus_coins))
 	_light_rune(int(round(m.x)), int(round(m.y)))
 	tween(m, {"scale": 1.25}, 0.07, "out", delay)
 	later(delay + 0.07, func():
@@ -1050,7 +1091,7 @@ func damage_rubble(id: int, power := false, depth := 0) -> void:
 	_update_hud()
 
 func _update_hud() -> void:
-	var p := clampi(ceili(door_sand * 100.0 / door0), 0, 100)
+	var p := clampi(ceili(area_sand * 100.0 / area0), 0, 100)
 	if dig:
 		p = 100 - _dig_depth()   # how far the debris still has to go to reach the bottom
 	hud_pct = p
@@ -1086,6 +1127,12 @@ func _count_door() -> int:
 
 func _count_shaft() -> int:
 	_count_door()
+	var a := 0
+	for y in range(area.y0, BY):
+		for x in range(area.x0, area.x1):
+			if sand[y * SW + x] != 0:
+				a += 1
+	area_sand = a
 	var n := 0
 	for y in range(shaft.y0, BY):
 		for x in range(shaft.x0, shaft.x1):
@@ -1097,14 +1144,40 @@ func _door_face() -> float:
 	# x (cells) of the door's room-side face
 	return door_col + 0.5 - facing * DOOR_EDGE_W / 2.0
 
+## The door stays shut until (almost) no debris is left on the far side.
 func door_ready() -> bool:
-	return door_sand <= 3
+	if collect:
+		return _collect_done()
+	return area_sand <= maxi(6, roundi(area0 * 0.03))
 
 ## The level's goal: the door is free, plus any extra goal the mode adds.
 func goal_done() -> bool:
+	if bonus:
+		return false
+	if collect:
+		return _collect_done()
 	if dig:
 		return dig_out >= DIG_WIN
 	return door_ready() and _goal_left() == 0
+
+func _collect_done() -> bool:
+	for k in NCOL:
+		if got[k] < need[k]:
+			return false
+	return true
+
+## Where collected gems and bonus coins fly to.
+func _collect_target() -> Vector2:
+	if bonus:
+		return Vector2(wx(hero_x + facing * 3.2), wy(BY - 6.5))
+	return Vector2(wx(door_col + 0.5), wy(BY - 10.0))
+
+## A gem (or coin) that flies from the board to the door lock or Zaki's bag.
+func _fly(from: Vector2, t: Texture2D, delay: float, on_land: Callable) -> void:
+	var to := _collect_target()
+	later(delay, func():
+		parts.append({"kind": "fly", "x0": from.x, "y0": from.y, "x": from.x, "y": from.y, "tx": to.x, "ty": to.y,
+			"life": 0.0, "max": 0.55 + randf() * 0.15, "tex": t, "size": CELL * g * 0.8, "col": Color.WHITE, "vx": 0.0, "vy": 0.0, "grav": 0.0, "cb": on_land}))
 
 ## Sealed Chamber: destroy a tile for good and let the debris in.
 func _dig_cell(c: int, r: int) -> void:
@@ -1176,8 +1249,68 @@ func _dig_path_open() -> bool:
 			return true
 	return false
 
+## Sealed Chamber: every few seconds one empty dug tile grows back with a random gem.
+## If the player has been stuck for a while, a gem grows where it gives them a good move next to the debris.
+func _dig_tick(dt: float) -> void:
+	if state != "idle":
+		return
+	regen_t -= dt
+	if regen_t <= 0.0:
+		regen_t = 5.0
+		var empty := []
+		for id in dug:
+			if not _block_has_sand(id):
+				empty.append(id)
+		if not empty.is_empty():
+			_dig_close(empty[randi() % empty.size()])
+			bg_layer.queue_redraw()
+	if time - last_input > 7.0 and time - help_t > 7.0:
+		help_t = time
+		_dig_help()
+
+func _dig_help() -> void:
+	var reach := _dig_reach()
+	var empty := []
+	for id in dug:
+		if not _block_has_sand(id):
+			empty.append(id)
+	if empty.is_empty():
+		return
+	# prefer holes right next to the debris, and deeper ones
+	empty.sort_custom(func(a, b):
+		return _near_debris(a, reach) * 10 + a / COLS > _near_debris(b, reach) * 10 + b / COLS)
+	for id in empty.slice(0, 6):
+		var c: int = id % COLS
+		var r: int = id / COLS
+		for k in NCOL:
+			_dig_close(id, k)
+			for mv in all_moves():
+				if mv[0] == Vector2i(c, r) or mv[1] == Vector2i(c, r) or _near_debris(mv[0].y * COLS + mv[0].x, reach) > 0 or _near_debris(mv[1].y * COLS + mv[1].x, reach) > 0:
+					sparkle(cell_cx(c), cell_cy(r), 4)
+					bg_layer.queue_redraw()
+					hint = mv
+					return
+			_dig_open(id)
+	bg_layer.queue_redraw()
+
+func _near_debris(id: int, reach: Dictionary) -> int:
+	var c: int = id % COLS
+	var r: int = id / COLS
+	var n := 0
+	for d in [Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1)]:
+		if reach.has((r + d.y) * COLS + c + d.x) and in_b(c + d.x, r + d.y):
+			n += 1
+	return n
+
+## Undo a trial gem placed by _dig_help.
+func _dig_open(id: int) -> void:
+	var c: int = id % COLS
+	var r: int = id / COLS
+	grid[r][c] = null
+	_dig_cell(c, r)
+
 ## Close one dug hole again with a fresh gem.
-func _dig_close(id: int) -> void:
+func _dig_close(id: int, colour := -1) -> void:
 	dug.erase(id)
 	rubble.erase(id)
 	var c: int = id % COLS
@@ -1189,7 +1322,7 @@ func _dig_close(id: int) -> void:
 				grains -= 1
 			mask[y * SW + x] = 0
 	# pick a colour that does not make a ready-made line, so closed holes don't chain into free matches
-	var k := randi() % NCOL
+	var k := randi() % NCOL if colour < 0 else colour
 	for _t in 12:
 		var h := 1
 		var v := 1
@@ -1202,13 +1335,14 @@ func _dig_close(id: int) -> void:
 			while color_at(c, y) == k:
 				v += 1
 				y += d
-		if h < 3 and v < 3:
+		if (h < 3 and v < 3) or colour >= 0:
 			break
 		k = (k + 1) % NCOL
 	var m := _new_gem(c, r, k)
 	m.scale = 0.0
 	grid[r][c] = m
 	tween(m, {"scale": 1.0}, 0.25, "back")
+	spr(tex.fx_dust_puff, cell_cx(c), cell_cy(r), CELL * g * 0.4, CELL * g * 1.0, 0.3, randf() * TAU)
 
 ## How deep the debris has got: 0 at the top of the board, 100 at the bottom.
 func _dig_depth() -> int:
@@ -1388,17 +1522,6 @@ func collapse() -> void:
 			for c in COLS:
 				if grid[r][c] == null and not is_rub(c, r):
 					_dig_cell(c, r)
-		# holes the debris cannot flow into close up again with fresh gems, so matches made
-		# away from the debris never leave the board empty or the player without moves
-		var reach := _dig_reach()
-		var closed := 0
-		for id in dug.keys():
-			if not reach.has(id):
-				_dig_close(id)
-				closed += 1
-		if closed > 0:
-			bg_layer.queue_redraw()
-			await wait(0.25)
 		await _wait_settled()
 		return
 	for c in COLS:
@@ -1474,6 +1597,16 @@ func _resolve_clusters(cls: Array) -> void:
 	var t_end := 0.0
 	var made_special := false
 	for cl in cls:
+		if bonus and state != "won":
+			# every match sends a coin into Zaki's bag
+			var add := 1
+			bonus_coins += add
+			var first_id: int = cl.cells.keys()[0] if cl.has("cells") and not cl.cells.is_empty() else 0
+			var from := Vector2(cell_cx(first_id % COLS), cell_cy(first_id / COLS))
+			for q in add:
+				_fly(from, tex.coin, q * 0.08, func():
+					ui.set_bonus(true, bonus_coins)
+					play("pop0", 1.8, -14.0))
 		var max_len := 0
 		var has_h := false
 		var has_v := false
@@ -1866,6 +1999,11 @@ func end_turn() -> void:
 			boss_cd = BOSS_EVERY
 			await _boss_attack()
 		_update_extra()
+	if bonus and moves <= 0:
+		state = "won"
+		await wait(1.0)
+		_bonus_end()
+		return
 	if moves <= 0:
 		state = "busy"
 		var t0 = time
@@ -1880,7 +2018,9 @@ func end_turn() -> void:
 	if find_move().is_empty() and has_special().x < 0:
 		await _shuffle()
 		if dig and find_move().is_empty() and has_special().x < 0:
-			await _dig_refill()
+			_dig_help()
+			if find_move().is_empty():
+				await _dig_refill()
 			await _shuffle("Shuffling the board!")
 	state = "idle"
 	last_input = time
@@ -1966,7 +2106,8 @@ func _win() -> void:
 	if gen != level_gen:
 		return
 	_music("map")
-	ui.show_win(stars, earned, L.boss, level_idx < LEVELS.size() - 1)
+	var world_i: int = level_idx / 10
+	ui.show_win(stars, earned, L.boss, level_idx < LEVELS.size() - 1, L.boss and not meta.seen("bonus_%d" % world_i))
 
 ## Royal-Match style finale: every move left turns into a rocket that fires across the board.
 func _bonus_rockets(count: int, gen: int) -> int:
@@ -2067,7 +2208,7 @@ func _lose(timed_out := false) -> void:
 	await wait(1.0)
 	if gen != level_gen:
 		return
-	var left = clampi(ceili(door_sand * 100.0 / door0), 0, 100)
+	var left = clampi(ceili(area_sand * 100.0 / area0), 0, 100)
 	meta.log_event("level_end", {"level": level_idx + 1, "mode": mode, "result": "lost", "moves_left": 0,
 		"sand_left": left, "seconds": int(time - level_t0), "boosters": boosters_used, "timed_out": timed_out}, self)
 	ui.show_lose(left, "Out of moves!" if not timed_out else (TRAP_INFO[trap].lose if trap != "" else ("The boss got Zaki!" if L.boss else "Pushed into the spikes!")))
@@ -2149,6 +2290,42 @@ func begin_level(i: int, pre: Array) -> void:
 	_music("boss" if L.boss else "level_" + L.theme)
 	meta.log_event("level_start", {"level": i + 1, "mode": mode, "boss": L.boss, "lives": meta.lives}, self)
 	_tutorial_start()
+
+## Bonus round after a boss: no debris, no danger, 15 moves; every gem matched is a coin.
+func show_bonus_intro(world: int) -> void:
+	bonus_world = world
+	ui.show_bonus_intro()
+
+func begin_bonus() -> void:
+	var src: Dictionary = LEVELS[mini(bonus_world * 10 + 9, LEVELS.size() - 1)]
+	var o := src.duplicate()
+	o.mode = "bonus"
+	o.boss = false
+	o.hazard = ""
+	o.trap = ""
+	o.rubble = []
+	o.moves = 15
+	ui.hide_map()
+	ui.hide_overlay()
+	start_level(mini(bonus_world * 10 + 9, LEVELS.size() - 1), o)
+	moves = 15
+	ui.lvl_label.text = "Bonus"
+	ui.name_label.text = "Treasure round"
+	_update_hud()
+	level_t0 = time
+	state = "idle"
+	last_input = time
+	_music("level_" + L.theme)
+	ui.set_tip("Match as many gems as you can. Every gem is a coin!", 5.0)
+
+func _bonus_end() -> void:
+	meta.earn(bonus_coins)
+	meta.mark("bonus_%d" % bonus_world)
+	play("win")
+	for k in 20:
+		later(k * 0.04, func(): sparkle(ox + randf() * SW * g, oy + randf() * BY * g, 3))
+	_music("map")
+	ui.show_bonus_end(bonus_coins)
 
 func next_level() -> void:
 	select_level(mini(level_idx + 1, LEVELS.size() - 1))
@@ -2444,15 +2621,16 @@ func _sand_step() -> int:
 					var j: int = b + d
 					# normally a grain needs room beside it to roll; in dug tunnels it may also squeeze
 					# round the corner between two holes that only touch diagonally
-					if mask[j] == 1 and sand[j] == 0 and ((mask[i + d] == 1 and sand[i + d] == 0) or (dig and y >= BY - 1 and mask[i + d] == 0)):
+					if mask[j] == 1 and sand[j] == 0 and ((mask[i + d] == 1 and sand[i + d] == 0) or (y >= BY - 1 and mask[i + d] == 0)):
 						sand[j] = v
 						sand[i] = 0
 						moved += 1
 						went = true
 						break
 				d = -d
-			if dig and not went and y >= BY:
-				# in dug tunnels, debris on a flat floor creeps toward the nearest drop
+			if not went and y >= BY - 1:
+				# on the board (and the floor behind the door) debris spreads like a heavy fluid:
+				# a grain resting on a flat creeps toward the nearest drop, so no corner stays empty
 				for _t in 2:
 					var j2: int = i + d
 					var st := 1
@@ -2545,12 +2723,13 @@ func _process(dt: float) -> void:
 			_upload_sand()
 		if not shaft.is_empty():
 			shaft_sand = _count_shaft()
-			var pc := clampi(ceili(door_sand * 100.0 / door0), 0, 100)
+			var pc := clampi(ceili(area_sand * 100.0 / area0), 0, 100)
 			if pc != hud_pct:
 				_update_hud()
 		if (state == "idle" or state == "busy") and trap != "":
 			# Sealed Chamber: the threat closes in with time, whatever the debris does
 			_dig_drain()
+			_dig_tick(dt)
 			# safety net: a finished path that somehow is not draining opens anyway
 			dig_check -= dt
 			if dig and dig_out < DIG_WIN and dig_check <= 0.0:
@@ -2568,6 +2747,9 @@ func _process(dt: float) -> void:
 			elif state == "idle" and hz_p >= 1.0:
 				state = "busy"
 				_lose(true)
+		elif (state == "idle" or state == "busy") and (collect or bonus):
+			if state == "idle" and collect and goal_done():
+				_win()
 		elif state == "idle" or state == "busy":
 			_pour(dt)
 			pour_cd -= dt
@@ -2591,7 +2773,7 @@ func _process(dt: float) -> void:
 		var dp := roundi(hz_p * 100.0) * 2 + (1 if pour_left > 0.0 else 0)
 		if dp != danger_shown:
 			danger_shown = dp
-			ui.update_danger(hz_p, pour_left > 0.0, TRAP_INFO[trap].hud if trap != "" else "Danger")
+			ui.update_danger(hz_p, pour_left > 0.0, trap if trap != "" else ("boss" if boss_kind != "" else "spikes"))
 		sand_sfx_t -= dt
 		if mv > 25 and sand_sfx_t <= 0.0:
 			play("sand", 0.9 + randf() * 0.2, -14.0)
@@ -2601,6 +2783,19 @@ func _process(dt: float) -> void:
 	while i >= 0:
 		var p: Dictionary = parts[i]
 		p.life += dt
+		if p.kind == "fly":
+			# arc from the board up to the door lock / Zaki's bag
+			var t := clampf(p.life / p.max, 0.0, 1.0)
+			var e := t * t * (3.0 - 2.0 * t)
+			p.x = lerpf(p.x0, p.tx, e)
+			p.y = lerpf(p.y0, p.ty, e) - sin(t * PI) * g * 14.0
+			if p.life > p.max:
+				var cb: Callable = p.cb
+				parts.remove_at(i)
+				sparkle(p.tx, p.ty, 2)
+				cb.call()
+			i -= 1
+			continue
 		p.vy += p.grav * dt
 		p.x += p.vx * dt
 		p.y += p.vy * dt
@@ -2745,7 +2940,7 @@ func _hero_frames(dt: float) -> void:
 		"cheer":
 			key = "exit"
 			idx = mini(2, int(pose_t * 7.0))
-		"wave":
+		"wave", "bag":
 			key = "exit"
 			idx = 3
 		"walkin":
@@ -2896,8 +3091,56 @@ func _draw_hazard(ci: CanvasItem) -> void:
 		"lava":
 			_draw_lava(ci)
 		_:
-			if L.get("hazard", "") == "spikes":
+			if L.get("hazard", "") == "spikes" and not (collect or bonus):
 				_draw_spike_wall(ci)
+	if collect:
+		_draw_gem_lock(ci)
+	if bonus:
+		_draw_bag(ci)
+
+## Gem Lock levels: a stone plaque on the door with one socket per gem colour that lights up when it is full.
+func _draw_gem_lock(ci: CanvasItem) -> void:
+	if door_swing > 0.3:
+		return
+	var cx := wx(door_col + 0.5) - facing * g * 3.5
+	var top := wy(BY - 18.0)
+	var w := g * 5.6
+	var h := g * 16.0
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.22, 0.15, 0.08, 0.95)
+	sb.border_color = Color("d9a530")
+	sb.set_border_width_all(maxi(2, int(g * 0.4)))
+	sb.set_corner_radius_all(int(g * 1.2))
+	ci.draw_style_box(sb, Rect2(cx - w / 2.0, top, w, h))
+	for k in NCOL:
+		var ctr := Vector2(cx, top + h * (k + 0.5) / NCOL)
+		var full: bool = got[k] >= need[k]
+		var frac := clampf(float(got[k]) / maxf(1.0, float(need[k])), 0.0, 1.0)
+		ci.draw_circle(ctr, g * 2.1, Color(0.05, 0.03, 0.02))
+		if frac > 0.0:
+			ci.draw_arc(ctr, g * 2.1, -PI / 2.0, -PI / 2.0 + TAU * frac, 24, Color("ffd34a"), g * 0.5, true)
+		_draw_tex_centered(ci, tex.gems[k], ctr, Vector2(g, g) * 3.2, 0.0, Color(1, 1, 1, 1.0 if full else 0.35))
+		if full:
+			ci.draw_circle(ctr + Vector2(g * 1.6, g * 1.4), g * 0.9, Color("4fcf6a"))
+
+## Bonus round: Zaki holds his treasure sack open.
+func _draw_bag(ci: CanvasItem) -> void:
+	var m := _collect_target()
+	var w := g * 7.0
+	var bob := sin(time * 3.0) * g * 0.3
+	var body := PackedVector2Array()
+	for k in 19:
+		var a := PI * k / 18.0
+		body.append(m + Vector2(-cos(a) * w * 0.55, sin(a) * w * 0.75 + w * 0.15 + bob))
+	ci.draw_colored_polygon(body, Color("8a5a2b"))
+	ci.draw_polyline(body, Color("5a3a18"), maxf(2.0, g * 0.4), true)
+	# open mouth with coins glinting inside
+	ci.draw_set_transform(m + Vector2(0, w * 0.15 + bob), 0.0, Vector2(1.0, 0.35))
+	ci.draw_circle(Vector2.ZERO, w * 0.55, Color("3a2410"))
+	ci.draw_circle(Vector2(-w * 0.15, w * 0.1), w * 0.25, Color("e8b830"))
+	ci.draw_circle(Vector2(w * 0.2, w * 0.05), w * 0.2, Color("ffd34a"))
+	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	ci.draw_arc(m + Vector2(0, w * 0.15 + bob), w * 0.55, PI, TAU, 18, Color("c8964a"), maxf(2.0, g * 0.6), true)
 
 ## When the debris shoves the door into the room, it fills the gap behind the door.
 func _draw_push_debris(ci: CanvasItem, off: float) -> void:
@@ -3202,13 +3445,6 @@ func _draw_bg(ci: CanvasItem) -> void:
 	_vgrad(ci, Rect2(ox, oy, W, BY * g * 0.45), Color(0, 0, 0, 0.5), Color(0, 0, 0, 0))
 	var rr = Rect2(wx(room.x0), wy(room.y0), (room.x1 - room.x0) * g, (room.y1 - room.y0) * g)
 	_vgrad(ci, Rect2(rr.position, Vector2(rr.size.x, g * 3.0)), Color(0, 0, 0, 0.4), Color(0, 0, 0, 0))
-	# shaft recess: the tomb wall texture deep in shadow
-	var sr0 = Rect2(wx(area.x0), wy(area.y0), (area.x1 - area.x0) * g, (BY - area.y0) * g)
-	var kw: float = (14.0 * g) / float(tex.stonewall.get_width())
-	ci.draw_set_transform(sr0.position, 0.0, Vector2(kw, kw))
-	ci.draw_texture_rect(tex.stonewall, Rect2(Vector2.ZERO, sr0.size / kw), true, Color(0.62, 0.55, 0.5))
-	ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	_vgrad(ci, sr0, Color(0, 0, 0, 0.15), Color(0, 0, 0, 0.35))
 	# board backing
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color("101736")
@@ -3285,7 +3521,7 @@ func _draw_door(ci: CanvasItem) -> void:
 	var bot = wy(BY) - g * 0.2
 	var h = bot - top
 	var heave: float = 0.5 + 0.5 * sin(push_ph) if hero_pose == "push" else 0.0
-	var free := clampf(1.0 - float(door_sand) / float(door0), 0.0, 1.0)
+	var free := clampf(1.0 - float(area_sand) / float(area0), 0.0, 1.0)
 	var jit := facing * (heave * 0.12 + door_hit * 0.25) * g * (0.4 + free)
 	var w := DOOR_EDGE_W * g
 	# opening: the door slides up into the ceiling, so only its lower part stays visible
@@ -3408,7 +3644,7 @@ func _draw_crust(ci: CanvasItem) -> void:
 		_draw_tex_centered(ci, tex.fx_crust, Vector2(cell_cx(c), cell_cy(r)), Vector2(sz, sz) * 1.02, 0.0, Color(glow, glow, glow))
 
 func _draw_fx(ci: CanvasItem) -> void:
-	if not shaft.is_empty() and not L.is_empty() and trap == "":
+	if not shaft.is_empty() and not L.is_empty() and trap == "" and not (collect or bonus):
 		_draw_source(ci)
 	if mode == "crust":
 		_draw_crust(ci)
@@ -3510,6 +3746,10 @@ func _draw_fx(ci: CanvasItem) -> void:
 				ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			"mote":
 				pass
+			"fly":
+				var t: float = clampf(pt.life / pt.max, 0.0, 1.0)
+				var sz: float = pt.size * lerpf(1.0, 0.6, t)
+				_draw_tex_centered(ci, pt.tex, Vector2(pt.x, pt.y), Vector2(sz, sz), t * 4.0)
 			"leaf":
 				var col: Color = pt.col
 				col.a = minf(1.0, a * 2.0)
@@ -3545,7 +3785,7 @@ func _draw_add(ci: CanvasItem) -> void:
 		var wdt := absf(_hazard_front() - far) * g
 		_draw_tex_centered(ci, glow_tex, Vector2(mid, wy(BY - 2.0)), Vector2(wdt * 1.6 + g * 8.0, g * 14.0), 0.0, Color(1.0, 0.45, 0.1, 0.55))
 	if not shaft.is_empty():
-		var free := clampf(1.0 - float(door_sand) / float(door0), 0.0, 1.0)
+		var free := clampf(1.0 - float(area_sand) / float(area0), 0.0, 1.0)
 		var leak := clampf((free - 0.55) / 0.45, 0.0, 1.0)
 		if leak > 0.0 and door_swing <= 0.0:
 			var dx := wx(door_col + 0.5) + facing * DOOR_EDGE_W * g * 0.5
@@ -4136,7 +4376,7 @@ func _run_autotest() -> void:
 	select_level(0)
 	await wait(0.8)
 	await _shot("02_intro")
-	var lvls := [0, 1, 4, 9, 12, 19, 33, 45, 54, 59]
+	var lvls := [0, 2, 4, 9, 12, 19, 33, 45, 54, 59]
 	var env_l := OS.get_environment("AUTOTEST_LEVELS")
 	if env_l != "":
 		lvls = []
@@ -4176,9 +4416,39 @@ func _run_autotest() -> void:
 		await wait(0.5)
 		print("AUTOTEST RESULT level=%d mode=%s boss=%s state=%s moves_left=%d danger_peak=%.2f danger_end=%.2f secs=%d" % [lv + 1, mode, L.boss, state, moves, peak, hz_p, int(time - level_t0)])
 		await _shot("L%d_d_end" % (lv + 1))
+	if OS.get_environment("AUTOTEST_LEVELS") == "" or OS.get_environment("AUTOTEST_BONUS") != "":
+		# bonus round
+		show_bonus_intro(0)
+		await wait(0.8)
+		await _shot("90_bonus_intro")
+		begin_bonus()
+		var nb := 0
+		while state != "won" and nb < 30:
+			if state == "idle":
+				await _bot_move()
+				nb += 1
+				if nb == 5:
+					await wait(1.0)
+					await _shot("91_bonus_play")
+			else:
+				await wait(0.1)
+		var wb := 0
+		while not ui.overlay.visible and wb < 100:
+			await wait(0.1)
+			wb += 1
+		await wait(0.5)
+		print("AUTOTEST BONUS coins=%d" % bonus_coins)
+		await _shot("92_bonus_end")
 	show_map()
 	await wait(1.0)
 	await _shot("99_map")
+	ui.show_profile()
+	await wait(0.6)
+	await _shot("95_profile")
+	ui.show_store()
+	await wait(0.6)
+	await _shot("96_store")
+	ui.hide_overlay()
 	for sv in [9, 29, 69]:
 		ui.map_view.scroll_to(sv)
 		await wait(0.6)

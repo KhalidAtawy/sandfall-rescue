@@ -18,6 +18,7 @@ var life_stamp := 0          # unix time the next life started regenerating
 var boosters := {"pre_rocket": 1, "pre_scarab": 1, "hammer": 2, "shuffle": 2, "moves5": 1}
 var settings := {"music": true, "sound": true, "vibration": true}
 var flags := {}              # tutorial / first-time tips already shown
+var profile := {"name": "Explorer", "avatar": 0}
 var upload_url := ""         # optional: where play-log events are sent (set in res://config.cfg)
 var upload_key := ""
 
@@ -39,6 +40,9 @@ func setup(level_count: int) -> void:
 		for k in se:
 			settings[k] = bool(se[k])
 		flags = cf.get_value("p", "flags", {})
+		var pr = cf.get_value("p", "profile", {})
+		for k in pr:
+			profile[k] = pr[k]
 	else:
 		# carry over stars from the first versions of the game
 		var old := ConfigFile.new()
@@ -61,6 +65,7 @@ func save() -> void:
 	cf.set_value("p", "boosters", boosters)
 	cf.set_value("p", "settings", settings)
 	cf.set_value("p", "flags", flags)
+	cf.set_value("p", "profile", profile)
 	cf.save(SAVE_PATH)
 
 func now() -> int:
@@ -123,6 +128,20 @@ func use_booster(key: String) -> bool:
 
 func can_use(key: String) -> bool:
 	return int(boosters.get(key, 0)) > 0 or coins >= PRICES[key]
+
+## Buy one booster with coins and keep it for later.
+func buy_booster(key: String) -> bool:
+	if not spend(PRICES[key]):
+		return false
+	boosters[key] = int(boosters.get(key, 0)) + 1
+	save()
+	return true
+
+func total_stars() -> int:
+	var n := 0
+	for b in best:
+		n += int(b)
+	return n
 
 func seen(flag: String) -> bool:
 	return flags.has(flag)

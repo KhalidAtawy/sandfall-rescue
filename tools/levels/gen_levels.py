@@ -198,8 +198,13 @@ def main(out_path):
                 curve *= 1.3                    # first levels teach the game
             moves = max(10, round(grains / PER_MOVE.get(mode, 104.0) * curve * INFLOW))
             moves += GOAL_BONUS.get(mode, 0)
+            if li in (2, 6) and not is_boss:
+                # Gem Lock: no debris; collect `need` of each of the 4 gem colours
+                mode = "collect"
+                need = 8 + wi + li // 3
+                moves = round(need * 4 / 2.7) + 6
             time = round(grains / 26.0 * curve) if mode == "race" else 70 + moves * 7
-            theme = MODE_THEME[mode] if wi < 6 else (wkey if mode != "iron" else "iron")
+            theme = MODE_THEME.get(mode, wkey) if wi < 6 else (wkey if mode != "iron" else "iron")
             if mode == "race":
                 theme = "temple"
             levels.append({
@@ -207,6 +212,7 @@ def main(out_path):
                 "moves": moves, "time": time, "shaft": [s, s + w - 1], "room": side, "fill_top": 6,
                 "rubble": to_rects(rows), "hazard": boss_kind if is_boss else "spikes", "boss": is_boss,
                 "trap": TRAPS[wi] if li in (4, 7) else "",
+                "collect": [8 + wi + li // 3] * 4 if li in (2, 6) else [0, 0, 0, 0],
             })
     worlds = [{"name": w[0], "theme": w[1], "boss": w[3], "mode": w[2] or ""} for w in WORLDS]
     with open(out_path, "w") as f:

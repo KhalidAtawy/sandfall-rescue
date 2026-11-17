@@ -1,7 +1,7 @@
 extends CanvasLayer
 ## HUD, toasts, level select and win/lose cards. All built in code.
 
-const HUD_H := 132.0
+const HUD_H := 154.0
 const BAR_H := 118.0
 const MapView := preload("res://scripts/map.gd")
 const TEX_COIN := preload("res://assets/gfx/ui/coin.png")
@@ -30,6 +30,14 @@ var lvl_label: Label
 var name_label: Label
 var time_label: Label
 var danger_bar: DangerBar
+var goal_row: GoalRow
+var ring_cap: Label
+var bonus_lbl: Label
+var avatar_btn: AvatarBtn
+var store_btn: Button
+const AVATARS := ["res://assets/gfx/ui/title_hero.png", "res://assets/gfx/chasers/golem.png", "res://assets/gfx/chasers/mummy.png",
+	"res://assets/gfx/chasers/cobra.png", "res://assets/gfx/board/scarab.png", "res://assets/gfx/board/gem_red.png",
+	"res://assets/gfx/board/gem_blue.png", "res://assets/gfx/ui/coin.png"]
 var extra_label: Label
 var extra_icon: TextureRect
 var moves_panel: PanelContainer
@@ -73,33 +81,101 @@ var pre_btns := {}
 var nolives_timer: Label
 var sec_t := 0.0
 
-## A slim bar that fills as the danger gets closer to Zaki.
+## The danger track: Zaki on one end, the threat on the other. They get closer as the danger grows.
 class DangerBar extends Control:
 	var p := 0.0
-	var label := "DANGER"
 	var pouring := false
+	var kind := "spikes"          # spikes, boss, snake, water, lava
+	var threat_tex: Texture2D
+	var zaki_tex: Texture2D
+	func _draw() -> void:
+		var h := size.y
+		var r := h * 0.5
+		var x0 := r
+		var x1 := size.x - r
+		var col := Color("5fd17a").lerp(Color("ffd36b"), clampf(p * 2.0, 0.0, 1.0)).lerp(Color("ff5a4a"), clampf(p * 2.0 - 1.0, 0.0, 1.0))
+		# Zaki waits at the right end; the danger creeps along the track toward him like a fuse
+		var zx := x1 - h * 0.2
+		var fx := lerpf(x0, zx - h * 0.4, clampf(p, 0.0, 1.0))
+		draw_line(Vector2(x0, r), Vector2(zx, r), Color(0.08, 0.06, 0.14, 0.95), h * 0.5, true)
+		draw_line(Vector2(x0, r), Vector2(zx, r), Color(1, 1, 1, 0.08), h * 0.3, true)
+		if p > 0.005:
+			draw_line(Vector2(x0, r), Vector2(fx, r), Color(col, 0.95), h * 0.32, true)
+			draw_circle(Vector2(fx, r), h * 0.2, col.lightened(0.3))
+		# the threat at the left end
+		draw_circle(Vector2(x0, r), r, Color(0.12, 0.08, 0.2))
+		draw_arc(Vector2(x0, r), r, 0, TAU, 24, col, 2.5, true)
+		match kind:
+			"spikes":
+				for k in 3:
+					var by := r * 0.45 + k * r * 0.4
+					draw_colored_polygon(PackedVector2Array([Vector2(x0 - r * 0.5, by - r * 0.15), Vector2(x0 + r * 0.6, by), Vector2(x0 - r * 0.5, by + r * 0.15)]), Color("d8d8e0"))
+			"water":
+				draw_circle(Vector2(x0, r * 1.15), r * 0.45, Color("4ab0ff"))
+				draw_colored_polygon(PackedVector2Array([Vector2(x0 - r * 0.42, r * 1.0), Vector2(x0, r * 0.3), Vector2(x0 + r * 0.42, r * 1.0)]), Color("4ab0ff"))
+			"lava":
+				draw_circle(Vector2(x0, r * 1.15), r * 0.45, Color("ff7a1a"))
+				draw_colored_polygon(PackedVector2Array([Vector2(x0 - r * 0.42, r * 1.0), Vector2(x0, r * 0.3), Vector2(x0 + r * 0.42, r * 1.0)]), Color("ff7a1a"))
+			"snake":
+				draw_circle(Vector2(x0, r), r * 0.6, Color("4c9c3c"))
+				draw_circle(Vector2(x0 - r * 0.22, r * 0.85), r * 0.14, Color("ffe14a"))
+				draw_circle(Vector2(x0 + r * 0.22, r * 0.85), r * 0.14, Color("ffe14a"))
+			_:
+				if threat_tex:
+					var s := (h * 0.9) / maxf(threat_tex.get_width(), threat_tex.get_height())
+					var sz := Vector2(threat_tex.get_width(), threat_tex.get_height()) * s
+					draw_texture_rect(threat_tex, Rect2(Vector2(x0, r) - sz / 2.0, sz), false)
+		if pouring and int(Time.get_ticks_msec() / 250) % 2 == 0:
+			draw_circle(Vector2(x0 + r * 0.8, r * 0.2), r * 0.38, Color("ffb347"))
+			draw_rect(Rect2(x0 + r * 0.75, r * 0.0, r * 0.1, r * 0.28), Color.BLACK)
+			draw_rect(Rect2(x0 + r * 0.75, r * 0.34, r * 0.1, r * 0.08), Color.BLACK)
+		# Zaki
+		if zaki_tex:
+			var s2 := (h * 1.05) / zaki_tex.get_height()
+			var sz2 := Vector2(zaki_tex.get_width(), zaki_tex.get_height()) * s2
+			var zc := Color(1, 1, 1) if p < 0.7 else Color(1, 0.6, 0.6)
+			draw_texture_rect(zaki_tex, Rect2(Vector2(zx, r) - sz2 / 2.0, sz2), false, zc)
+
+## The gem counters in Gem Lock levels: one row of gem + how many are still needed.
+class GoalRow extends Control:
+	var need := [0, 0, 0, 0]
+	var got := [0, 0, 0, 0]
+	var gem_tex := []
 	var font: Font
 	func _draw() -> void:
-		var r := size.y / 2.0
+		if gem_tex.is_empty():
+			return
+		var cw: float = size.x / need.size()
 		var bg := StyleBoxFlat.new()
 		bg.bg_color = Color(0.08, 0.06, 0.14, 0.9)
 		bg.border_color = Color("b9821c")
 		bg.set_border_width_all(2)
-		bg.set_corner_radius_all(int(r))
+		bg.set_corner_radius_all(int(size.y / 2.0))
 		draw_style_box(bg, Rect2(Vector2.ZERO, size))
-		var col := Color("5fd17a").lerp(Color("ffd36b"), clampf(p * 2.0, 0.0, 1.0)).lerp(Color("ff5a4a"), clampf(p * 2.0 - 1.0, 0.0, 1.0))
-		if pouring:
-			col = col.lerp(Color("ffb347"), 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012))
-		var w := maxf(size.y - 6.0, (size.x - 6.0) * clampf(p, 0.0, 1.0))
-		var fill := StyleBoxFlat.new()
-		fill.bg_color = col
-		fill.set_corner_radius_all(int(r))
-		draw_style_box(fill, Rect2(3, 3, w, size.y - 6.0))
-		var txt: String = "INCOMING!" if pouring else label
-		var fs := int(size.y * 0.68)
-		var tw := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		draw_string_outline(font, Vector2((size.x - tw) / 2.0, size.y * 0.72), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0.08, 0.06, 0.14))
-		draw_string(font, Vector2((size.x - tw) / 2.0, size.y * 0.72), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+		for k in need.size():
+			var ox: float = k * cw
+			var done: bool = got[k] >= need[k]
+			var gs: float = size.y * 0.9
+			draw_texture_rect(gem_tex[k], Rect2(ox + cw * 0.12, (size.y - gs) / 2.0, gs, gs), false, Color(1, 1, 1, 0.45) if done else Color.WHITE)
+			var txt: String = "OK" if done else str(maxi(0, need[k] - got[k]))
+			var fs: int = int(size.y * 0.66)
+			var px: float = ox + cw * 0.12 + gs + 8.0
+			draw_string_outline(font, Vector2(px, size.y * 0.74), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color(0.08, 0.06, 0.14))
+			draw_string(font, Vector2(px, size.y * 0.74), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("7cf08a") if done else Color.WHITE)
+
+## Round profile picture button.
+class AvatarBtn extends Button:
+	var tex2: Texture2D
+	var sel := false
+	func _draw() -> void:
+		var c := size / 2.0
+		var r := minf(size.x, size.y) / 2.0 - 3.0
+		draw_circle(c, r, Color("3a2d66"))
+		if tex2:
+			var s := (r * 1.6) / maxf(tex2.get_width(), tex2.get_height())
+			var sz := Vector2(tex2.get_width(), tex2.get_height()) * s
+			draw_texture_rect(tex2, Rect2(c - sz / 2.0, sz), false)
+		draw_arc(c, r, 0, TAU, 40, Color("f5c542") if sel else Color("b9821c"), 6.0 if sel else 3.5, true)
 
 class Ring extends Control:
 	var p := 100.0
@@ -334,7 +410,12 @@ func build() -> void:
 	hud.add_child(time_label)
 	time_label.visible = false
 	danger_bar = DangerBar.new()
-	danger_bar.font = font_black
+	danger_bar.zaki_tex = load("res://assets/gfx/zaki3/exit_1.png")
+	goal_row = GoalRow.new()
+	goal_row.font = font_black
+	goal_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	goal_row.visible = false
+	hud.add_child(goal_row)
 	danger_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(danger_bar)
 	extra_label = _label("", font_black, 24, Color("efe2c4"))
@@ -364,6 +445,13 @@ func build() -> void:
 	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(ring)
 	pct_label = _label("100%", font_display, 34, INK)
+	ring_cap = _label("SAND LEFT", font_black, 20, INK_SOFT)
+	ring_cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hud.add_child(ring_cap)
+	bonus_lbl = _label("", font_display, 46, GOLD)
+	bonus_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bonus_lbl.visible = false
+	hud.add_child(bonus_lbl)
 	hud.add_child(pct_label)
 
 	# ----- booster bar -----
@@ -448,6 +536,18 @@ func build() -> void:
 	coins_label = _label("300", font_display, 40, INK)
 	for n in [lives_icon, lives_label, lives_timer, coins_icon, coins_label]:
 		map_layer.add_child(n)
+	avatar_btn = AvatarBtn.new()
+	_flat(avatar_btn)
+	avatar_btn.pressed.connect(func():
+		game.play("click")
+		show_profile())
+	map_layer.add_child(avatar_btn)
+	store_btn = _button("+", "gold")
+	store_btn.add_theme_font_size_override("font_size", 40)
+	store_btn.pressed.connect(func():
+		game.play("click")
+		show_store())
+	map_layer.add_child(store_btn)
 	gear_btn = GearBtn.new()
 	_style_button(gear_btn, PANEL_2, GOLD_DEEP, 20)
 	gear_btn.pressed.connect(func():
@@ -561,8 +661,14 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	moves_panel.custom_minimum_size = Vector2(120, 96)
 	moves_panel.size = Vector2(120, 96)
 	name_label.size = Vector2(maxf(60.0, moves_panel.position.x - name_label.position.x - 12), 34)
-	danger_bar.position = Vector2(pad + 98, top + 86)
-	danger_bar.size = Vector2(name_label.size.x, 32)
+	danger_bar.position = Vector2(pad + 4, top + 106)
+	danger_bar.size = Vector2(vs.x - pad * 2.0 - 8.0, 46)
+	goal_row.position = Vector2(pad + 4, top + 100)
+	goal_row.size = Vector2(vs.x - pad * 2.0 - 8.0, 52)
+	ring_cap.position = Vector2(ring.position.x - 10.0, top + 80)
+	ring_cap.size = Vector2(96 + 88, 30)
+	bonus_lbl.position = Vector2(ring.position.x - 10.0, top + 20)
+	bonus_lbl.size = Vector2(190, 60)
 	var tw = minf(vs.x - 60.0, 600.0)
 	toast_panel.custom_minimum_size = Vector2(tw, 0)
 	toast_panel.size = Vector2(tw, 0)
@@ -591,13 +697,17 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	var mt := safe.x
 	top_bar.position = Vector2(0, 0)
 	top_bar.size = Vector2(vs.x, mt + 104.0)
-	lives_icon.position = Vector2(26, mt + 26)
+	avatar_btn.position = Vector2(14, mt + 10)
+	avatar_btn.size = Vector2(84, 84)
+	lives_icon.position = Vector2(112, mt + 26)
 	lives_icon.size = Vector2(56, 52)
-	lives_label.position = Vector2(92, mt + 16)
-	lives_timer.position = Vector2(94, mt + 62)
-	coins_icon.position = Vector2(vs.x * 0.5 - 40.0, mt + 28)
+	lives_label.position = Vector2(176, mt + 16)
+	lives_timer.position = Vector2(178, mt + 62)
+	coins_icon.position = Vector2(vs.x * 0.5 - 6.0, mt + 28)
 	coins_icon.size = Vector2(48, 48)
-	coins_label.position = Vector2(vs.x * 0.5 + 18.0, mt + 20)
+	coins_label.position = Vector2(vs.x * 0.5 + 50.0, mt + 20)
+	store_btn.position = Vector2(vs.x - 190.0, mt + 20)
+	store_btn.size = Vector2(66, 64)
 	gear_btn.position = Vector2(vs.x - 100.0, mt + 14)
 	gear_btn.size = Vector2(78, 78)
 	var pw := minf(vs.x - 120.0, 460.0)
@@ -624,11 +734,52 @@ func set_level(n: int, title: String, col: Color) -> void:
 	ring.col = col
 	ring.queue_redraw()
 
-func update_danger(p: float, pouring: bool, label := "Danger") -> void:
+func update_danger(p: float, pouring: bool, kind := "spikes") -> void:
 	danger_bar.p = p
 	danger_bar.pouring = pouring
-	danger_bar.label = label.to_upper()
+	danger_bar.kind = kind
 	danger_bar.queue_redraw()
+
+func set_threat(kind: String, t: Texture2D) -> void:
+	danger_bar.kind = kind
+	danger_bar.threat_tex = t
+	danger_bar.queue_redraw()
+
+## Gem Lock: show the gem counters instead of the danger track and the sand ring.
+func set_goals(need: Array, gems: Array, got := [0, 0, 0, 0]) -> void:
+	var on: bool = not need.is_empty() and need.max() > 0
+	goal_row.visible = on
+	danger_bar.visible = not on and not bonus_lbl.visible
+	ring.visible = not on
+	pct_label.visible = not on
+	ring_cap.visible = not on
+	if on:
+		goal_row.need = need
+		goal_row.got = got
+		goal_row.gem_tex = gems
+		goal_row.queue_redraw()
+
+func set_ring_caption(t: String) -> void:
+	ring_cap.text = t
+
+## Bonus round: coin counter instead of the danger track and the sand ring.
+func set_bonus(on: bool, coins := 0) -> void:
+	bonus_lbl.visible = on
+	bonus_lbl.text = "+%d" % coins
+	if on:
+		danger_bar.visible = false
+		ring.visible = false
+		pct_label.visible = false
+		ring_cap.visible = false
+		goal_row.visible = false
+		bonus_lbl.pivot_offset = bonus_lbl.size / 2.0
+		bonus_lbl.scale = Vector2(1.25, 1.25)
+		create_tween().tween_property(bonus_lbl, "scale", Vector2.ONE, 0.2)
+	elif not goal_row.visible:
+		danger_bar.visible = true
+		ring.visible = true
+		pct_label.visible = true
+		ring_cap.visible = true
 
 func set_extra(text: String) -> void:
 	extra_icon.visible = false
@@ -699,6 +850,8 @@ func _refresh_top() -> void:
 	var sl: int = game.meta.seconds_to_next_life()
 	lives_timer.text = "Full" if game.meta.lives >= game.meta.MAX_LIVES else "%d:%02d" % [sl / 60, sl % 60]
 	coins_label.text = str(game.meta.coins)
+	avatar_btn.tex2 = _avatar_tex(int(game.meta.profile.avatar))
+	avatar_btn.queue_redraw()
 	play_btn.text = "Level %d" % (game.meta.current_level() + 1)
 
 func show_title() -> void:
@@ -976,7 +1129,7 @@ func show_intro(idx: int, boss: bool, mode_title: String, text: String, badge: T
 	card_box.add_child(c)
 	_show_card()
 
-func show_win(stars: int, coins: int, boss: bool, has_next: bool) -> void:
+func show_win(stars: int, coins: int, boss: bool, has_next: bool, bonus_offer := false) -> void:
 	_clear_card()
 	var t = _label("Boss beaten!" if boss else "Zaki escaped!", font_display, 66, GOLD)
 	_heading(t)
@@ -1009,11 +1162,220 @@ func show_win(stars: int, coins: int, boss: bool, has_next: bool) -> void:
 		e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		e.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
 		card_box.add_child(e)
+	if bonus_offer:
+		var bb = _button("Bonus round!", "teal")
+		bb.pressed.connect(func():
+			game.play("click")
+			game.show_bonus_intro(game.level_idx / 10))
+		card_box.add_child(bb)
+		card_box.move_child(bb, card_box.get_child_count() - 2)
 	var lb = _button("Map", "ghost")
 	lb.pressed.connect(func():
 		game.play("click")
 		game.show_map())
 	card_box.add_child(lb)
+	_show_card()
+
+func show_bonus_intro() -> void:
+	_clear_card()
+	var ci := CoinIcon.new()
+	ci.custom_minimum_size = Vector2(0, 130)
+	card_box.add_child(ci)
+	var t = _label("Bonus Round!", font_display, 64, GOLD)
+	_heading(t)
+	card_box.add_child(t)
+	var d = _label("No danger here. Match as many gems as you can in 15 moves. Every gem is a coin for Zaki's bag!", font_body, 30, INK)
+	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.custom_minimum_size = Vector2(card.custom_minimum_size.x - 80, 0)
+	card_box.add_child(d)
+	var b = _button("Play", "gold")
+	b.pressed.connect(func():
+		game.play("click")
+		game.begin_bonus())
+	card_box.add_child(b)
+	var c = _button("Skip", "ghost")
+	c.pressed.connect(func():
+		game.play("click")
+		game.meta.mark("bonus_%d" % game.bonus_world)
+		game.show_map())
+	card_box.add_child(c)
+	_show_card()
+
+func show_bonus_end(coins: int) -> void:
+	_clear_card()
+	var t = _label("Treasure!", font_display, 66, GOLD)
+	_heading(t)
+	card_box.add_child(t)
+	var ci := CoinIcon.new()
+	ci.custom_minimum_size = Vector2(64, 64)
+	var cl = _label("+%d" % coins, font_display, 60, GOLD)
+	card_box.add_child(_toggle_row([ci, cl]))
+	var b = _button("Continue", "gold")
+	b.pressed.connect(func():
+		game.play("click")
+		game.show_map())
+	card_box.add_child(b)
+	_show_card()
+
+# ----- profile and store -----
+func _avatar_tex(i: int) -> Texture2D:
+	return load(AVATARS[clampi(i, 0, AVATARS.size() - 1)])
+
+func show_profile() -> void:
+	_clear_card()
+	var t = _label("Profile", font_display, 62, GOLD)
+	_heading(t)
+	card_box.add_child(t)
+	var big := AvatarBtn.new()
+	big.tex2 = _avatar_tex(int(game.meta.profile.avatar))
+	big.sel = true
+	big.custom_minimum_size = Vector2(150, 150)
+	big.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_flat(big)
+	card_box.add_child(_toggle_row([big]))
+	var name_in := LineEdit.new()
+	name_in.text = str(game.meta.profile.name)
+	name_in.max_length = 14
+	name_in.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_in.placeholder_text = "Your name"
+	name_in.add_theme_font_override("font", font_display)
+	name_in.add_theme_font_size_override("font_size", 38)
+	name_in.add_theme_color_override("font_color", INK)
+	name_in.add_theme_stylebox_override("normal", _box(Color(0.08, 0.06, 0.14), GOLD_DEEP, 20, 3, 12))
+	name_in.add_theme_stylebox_override("focus", _box(Color(0.08, 0.06, 0.14), GOLD, 20, 3, 12))
+	name_in.custom_minimum_size = Vector2(0, 76)
+	card_box.add_child(name_in)
+	var pick = _label("Choose your picture", font_body, 26, INK_SOFT)
+	pick.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_box.add_child(pick)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 14)
+	grid.add_theme_constant_override("v_separation", 14)
+	var chosen := [int(game.meta.profile.avatar)]
+	var btns := []
+	for i in AVATARS.size():
+		var ab := AvatarBtn.new()
+		ab.tex2 = _avatar_tex(i)
+		ab.sel = i == chosen[0]
+		ab.custom_minimum_size = Vector2(100, 100)
+		_flat(ab)
+		var ii := i
+		ab.pressed.connect(func():
+			chosen[0] = ii
+			for b2 in btns:
+				b2.sel = false
+				b2.queue_redraw()
+			ab.sel = true
+			ab.queue_redraw()
+			big.tex2 = ab.tex2
+			big.queue_redraw()
+			game.play("click"))
+		btns.append(ab)
+		grid.add_child(ab)
+	var gc := CenterContainer.new()
+	gc.add_child(grid)
+	card_box.add_child(gc)
+	var stats = _label("Levels done %d  ·  Stars %d" % [game.meta.current_level(), game.meta.total_stars()], font_body, 26, INK)
+	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_box.add_child(stats)
+	var sv = _button("Save", "gold")
+	sv.pressed.connect(func():
+		var nm := name_in.text.strip_edges()
+		game.meta.profile.name = nm if nm != "" else "Explorer"
+		game.meta.profile.avatar = chosen[0]
+		game.meta.save()
+		game.play("shine")
+		_refresh_top()
+		hide_overlay())
+	card_box.add_child(sv)
+	_show_card()
+
+func _flat(b: Button) -> void:
+	var e := StyleBoxEmpty.new()
+	for st in ["normal", "hover", "pressed", "focus", "disabled"]:
+		b.add_theme_stylebox_override(st, e)
+
+func _store_row(icon: Texture2D, title: String, sub: String, price_text: String, on_buy: Callable) -> Control:
+	var row := PanelContainer.new()
+	row.add_theme_stylebox_override("panel", _box(Color(0.12, 0.09, 0.22), Color(0.4, 0.3, 0.6), 18, 2, 10))
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 14)
+	var ic := TextureRect.new()
+	ic.texture = icon
+	ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ic.custom_minimum_size = Vector2(70, 70)
+	h.add_child(ic)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_child(_label(title, font_display, 30, INK))
+	if sub != "":
+		v.add_child(_label(sub, font_body, 22, INK_SOFT))
+	h.add_child(v)
+	var b = _button(price_text, "gold")
+	b.add_theme_font_size_override("font_size", 28)
+	b.custom_minimum_size = Vector2(150, 64)
+	b.pressed.connect(on_buy)
+	h.add_child(b)
+	row.add_child(h)
+	return row
+
+func show_store() -> void:
+	_clear_card()
+	var t = _label("Store", font_display, 62, GOLD)
+	_heading(t)
+	card_box.add_child(t)
+	var bal = _label("You have %d coins" % game.meta.coins, font_body, 28, INK)
+	bal.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_box.add_child(bal)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, minf(vsize.y * 0.58, 820.0))
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 12)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	card_box.add_child(scroll)
+	var items := [
+		["hammer", TEX_BOOST.hammer, "Hammer", "Smash one block or gem"],
+		["shuffle", TEX_BOOST.shuffle, "Shuffle", "Mix up the board"],
+		["moves5", TEX_BOOST.moves5, "+5 Moves", "Five extra moves"],
+		["pre_rocket", game.tex.rocket, "Rocket start", "Begin a level with a rocket"],
+		["pre_scarab", game.tex.scarab, "Scarab start", "Begin a level with a scarab"],
+	]
+	for it in items:
+		var key: String = it[0]
+		var price: int = game.meta.PRICES[key]
+		list.add_child(_store_row(it[1], it[2], "%s · you have %d" % [it[3], int(game.meta.boosters.get(key, 0))], str(price), func():
+			if game.meta.buy_booster(key):
+				game.play("shine")
+				show_store()
+			else:
+				game.play("bad")
+				toast("Not enough coins")))
+	list.add_child(_store_row(TEX_LIFE, "Refill lives", "Back to %d lives" % game.meta.MAX_LIVES, str(game.meta.PRICES.refill), func():
+		if game.meta.lives >= game.meta.MAX_LIVES:
+			toast("Your lives are already full")
+		elif game.meta.refill_lives():
+			game.play("shine")
+			show_store()
+		else:
+			toast("Not enough coins")))
+	var packs = _label("Coin packs", font_display, 34, GOLD)
+	packs.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	list.add_child(packs)
+	for pk in [[500, "$0.99"], [1500, "$2.99"], [4000, "$6.99"]]:
+		list.add_child(_store_row(TEX_COIN, "%d coins" % pk[0], "", pk[1], func():
+			toast("Coin packs arrive with the store release")))
+	var c = _button("Close", "ghost")
+	c.pressed.connect(func():
+		game.play("click")
+		_refresh_top()
+		hide_overlay())
+	card_box.add_child(c)
 	_show_card()
 
 func show_lose(left: int, title := "Zaki got caught!") -> void:
