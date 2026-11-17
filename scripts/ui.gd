@@ -97,8 +97,8 @@ class DangerBar extends Control:
 		# Zaki waits at the right end; the danger creeps along the track toward him like a fuse
 		var zx := x1 - h * 0.2
 		var fx := lerpf(x0, zx - h * 0.4, clampf(p, 0.0, 1.0))
-		draw_line(Vector2(x0, r), Vector2(zx, r), Color(0.08, 0.06, 0.14, 0.95), h * 0.5, true)
-		draw_line(Vector2(x0, r), Vector2(zx, r), Color(1, 1, 1, 0.08), h * 0.3, true)
+		draw_line(Vector2(x0, r), Vector2(zx, r), Color("b9821c"), h * 0.5 + 4.0, true)
+		draw_line(Vector2(x0, r), Vector2(zx, r), Color(0.16, 0.12, 0.28), h * 0.5, true)
 		if p > 0.005:
 			draw_line(Vector2(x0, r), Vector2(fx, r), Color(col, 0.95), h * 0.32, true)
 			draw_circle(Vector2(fx, r), h * 0.2, col.lightened(0.3))
@@ -418,7 +418,7 @@ func build() -> void:
 	hud.add_child(goal_row)
 	danger_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(danger_bar)
-	extra_label = _label("", font_black, 24, Color("efe2c4"))
+	extra_label = _label("", font_black, 21, Color("ffb37a"))
 	hud.add_child(extra_label)
 	extra_icon = TextureRect.new()
 	extra_icon.texture = load("res://assets/gfx/fx/icon_bandage.png")
@@ -647,11 +647,11 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	menu_btn.position = Vector2(pad, top + 12)
 	menu_btn.size = Vector2(78, 78)
 	lvl_label.position = Vector2(pad + 96, top + 6)
-	name_label.position = Vector2(pad + 98, top + 50)
+	name_label.position = Vector2(pad + 98, top + 46)
 	time_label.position = Vector2(pad + 98, top + 82)
-	extra_label.size = Vector2(320, 34)
-	extra_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	extra_label.position = Vector2(vs.x - pad - 320, top + 87)
+	extra_label.size = Vector2(300, 30)
+	extra_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	extra_label.position = Vector2(pad + 98, top + 74)
 	extra_icon.position = Vector2(pad + 252, top + 82)
 	var right = vs.x - pad
 	pct_label.position = Vector2(right - 88, top + 26)
