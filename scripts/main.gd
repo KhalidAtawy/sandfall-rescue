@@ -17,16 +17,16 @@ const DOOR_EDGE_W := 2.6   # side view of the door, in cells
 const SAFE_H := 17.0       # safe exit door height, in cells
 const RUBBLE_HIT := 20     # grains removed from a debris block per hit
 const MODES := {
-	"drain": {"title": "Clear the Door", "text": "Debris keeps pouring in behind the door, and its weight pushes Zaki back toward the spikes. Match gems next to the sand to drain it faster than it comes in. When the door is clear, Zaki escapes.\n\nA 2x2 square makes a Scarab that flies into the debris. A gem touching a line of 3 from the side joins the match."},
-	"iron": {"title": "Heavy Iron", "text": "Iron barely moves for small matches. Make rockets, bombs and orbs: power-ups smash a whole iron block at once."},
-	"chain": {"title": "Crystal Chain", "text": "Crystals crack in chains. Every hit also cracks the crystal blocks touching it."},
-	"crust": {"title": "Cooling Lava", "text": "Lava you leave alone for 6 moves cools into hard crust. A crusted block needs one hit to crack before it breaks."},
-	"wrap": {"title": "Bandaged Gems", "text": "The mummy wrapped some gems in bandages, and wrapped gems are stuck in place. Match next to them to tear the bandages off, then clear the door."},
-	"race": {"title": "Cobra Race", "text": "No move limit, but the debris never stops pushing. Be quick! Every power-up you make lets Zaki win back a step."},
-	"jars": {"title": "Canopic Jars", "text": "Ancient jars sit on the board. Match next to a jar twice to break it open. Each one hides a rocket. Break every jar and clear the door."},
-	"glass": {"title": "Obsidian Glass", "text": "Some gems are sealed in black glass. It takes two matches next to them (or a power-up) to shatter it. Free them all and clear the door."},
-	"runes": {"title": "Sun Runes", "text": "Sun runes glow under some gems. Clear a gem on top of a rune to light it. Light every rune and clear the door."},
-	"curse": {"title": "Creeping Curse", "text": "A golden curse grabs gems, and it spreads to a new gem every move you don't break any cover. Lift the whole curse and clear the door."},
+	"drain": {"title": "Clear the Door", "text": "Sand keeps falling behind the door and pushes Zaki toward the spikes. Match gems next to the sand to clear it and free the door!"},
+	"iron": {"title": "Heavy Iron", "text": "Iron is heavy. Power-ups smash a whole block at once."},
+	"chain": {"title": "Crystal Chain", "text": "Crystals crack in chains: one hit also cracks the blocks touching it."},
+	"crust": {"title": "Cooling Lava", "text": "Lava left alone for 6 moves cools into crust. Crust needs one extra hit."},
+	"wrap": {"title": "Bandaged Gems", "text": "Bandaged gems are stuck. Match next to them to tear the bandages off."},
+	"race": {"title": "Cobra Race", "text": "No move limit, but the debris never stops. Be quick!"},
+	"jars": {"title": "Canopic Jars", "text": "Match next to a jar twice to break it. Each jar hides a rocket."},
+	"glass": {"title": "Obsidian Glass", "text": "Gems in black glass need two matches next to them to break free."},
+	"runes": {"title": "Sun Runes", "text": "Clear the gems on top of the glowing runes to light them."},
+	"curse": {"title": "Creeping Curse", "text": "The gold curse spreads every move you don't break one. Clear it all."},
 }
 const WRAP_COUNT := 7
 const CHASER_H := {"golem": 20.0, "mummy": 19.0, "cobra": 17.0}
@@ -57,22 +57,24 @@ const MODE_SHORT := {
 ## One boss per world. "base" is the puppet used until the boss has its own art
 ## (assets/gfx/bosses/<kind>.png); "attacks" take turns every few moves.
 const BOSSES := {
-	"scorpion": {"name": "The Scorpion King", "base": "cobra", "tint": Color(1.0, 0.82, 0.5), "attacks": ["slam", "sand"]},
+	"scorpion": {"name": "The Scorpion King", "base": "cobra", "tint": Color(1.0, 0.82, 0.5), "attacks": ["sand", "sting"]},
 	"golem": {"name": "The Rock Golem", "base": "golem", "tint": Color(1, 1, 1), "attacks": ["smash", "slam"]},
-	"spider": {"name": "The Crystal Spider", "base": "golem", "tint": Color(0.78, 0.6, 1.0), "attacks": ["web", "slam"]},
-	"salamander": {"name": "The Lava Salamander", "base": "cobra", "tint": Color(1.0, 0.55, 0.35), "attacks": ["magma", "slam"]},
+	"spider": {"name": "The Crystal Spider", "base": "golem", "tint": Color(0.78, 0.6, 1.0), "attacks": ["web", "eat"]},
+	"salamander": {"name": "The Lava Salamander", "base": "cobra", "tint": Color(1.0, 0.55, 0.35), "attacks": ["magma", "burn"]},
 	"mummy": {"name": "The Mummy", "base": "mummy", "tint": Color(1, 1, 1), "attacks": ["wrap", "roar"]},
-	"cobra": {"name": "The Giant Cobra", "base": "cobra", "tint": Color(1, 1, 1), "attacks": ["venom", "roar"]},
-	"anubis": {"name": "Anubis the Guardian", "base": "mummy", "tint": Color(0.55, 0.6, 0.85), "attacks": ["smash", "roar"]},
+	"cobra": {"name": "The Giant Cobra", "base": "cobra", "tint": Color(1, 1, 1), "attacks": ["venom", "scramble"]},
+	"anubis": {"name": "Anubis the Guardian", "base": "mummy", "tint": Color(0.55, 0.6, 0.85), "attacks": ["steal", "smash"]},
 	"beetle": {"name": "The Obsidian Beetle", "base": "golem", "tint": Color(0.45, 0.6, 0.5), "attacks": ["burrow", "glass"]},
-	"sphinx": {"name": "The Sphinx", "base": "golem", "tint": Color(1.0, 0.9, 0.55), "attacks": ["gold", "roar"]},
-	"pharaoh": {"name": "The Cursed Pharaoh", "base": "mummy", "tint": Color(1.0, 0.85, 0.4), "attacks": ["curse", "slam", "wrap"]},
+	"sphinx": {"name": "The Sphinx", "base": "golem", "tint": Color(1.0, 0.9, 0.55), "attacks": ["gold", "scramble"]},
+	"pharaoh": {"name": "The Cursed Pharaoh", "base": "mummy", "tint": Color(1.0, 0.85, 0.4), "attacks": ["curse", "steal", "wrap"]},
 }
 const ATTACK_TEXT := {
 	"slam": "slams the wall! More debris pours in!", "smash": "smashes the floor! Rocks burst up!",
 	"sand": "flings sand over your gems!", "web": "spits webs over your gems!", "magma": "spits lava on your gems!",
 	"wrap": "wraps your gems in bandages!", "venom": "spits venom! It spreads if you ignore it!",
-	"roar": "roars and shoves Zaki back!", "burrow": "burrows up under the board!", "glass": "seals gems in obsidian!",
+	"roar": "roars and shoves Zaki back!", "sting": "stings! Zaki is knocked back and a move is lost!",
+	"eat": "wraps up your power-ups!", "burn": "breathes fire! The debris pours faster for a while!",
+	"scramble": "hypnotises the board! The gems swap places!", "steal": "weighs your heart and takes 2 moves!", "burrow": "burrows up under the board!", "glass": "seals gems in obsidian!",
 	"gold": "turns gems to gold!", "curse": "casts a creeping curse!",
 }
 const BOSS_EVERY := 3
@@ -82,11 +84,11 @@ const BOSS_EVERY := 3
 const SEALED_CHAMBER_ON := true
 const TRAP_INFO := {
 	"snake": {"name": "giant snake", "hud": "Snake", "lose": "The snake got Zaki!",
-		"text": "SEALED CHAMBER! Zaki is locked in with a giant snake sliding down from the ceiling. Here every match destroys its tiles for good and the debris pours into the holes. Dig a path all the way to the bottom of the board so the debris drains out and the door opens. Setting off a power-up makes the snake flinch."},
+		"text": "A giant snake is coming for Zaki! Every match digs holes. Dig a path to the bottom of the board so the sand drains out."},
 	"water": {"name": "rising water", "hud": "Water", "lose": "The water rose too high!",
-		"text": "SEALED CHAMBER! The room is flooding and the water keeps rising. Here every match destroys its tiles for good and the debris pours into the holes. Dig a path all the way to the bottom of the board so the debris drains out and the door opens. Setting off a power-up holds the water for a moment."},
+		"text": "The room is flooding! Every match digs holes. Dig a path to the bottom of the board so the sand drains out."},
 	"lava": {"name": "creeping lava", "hud": "Lava", "lose": "The lava reached Zaki!",
-		"text": "SEALED CHAMBER! Lava is creeping across the floor toward Zaki. Here every match destroys its tiles for good and the debris pours into the holes. Dig a path all the way to the bottom of the board so the debris drains out and the door opens. Setting off a power-up holds the lava for a moment."},
+		"text": "Lava is creeping toward Zaki! Every match digs holes. Dig a path to the bottom of the board so the sand drains out."},
 }
 ## Gem covers: a covered gem is stuck. Matching next to it (or blasting it) removes one layer.
 const COVER_HP := {"bandage": 1, "sand": 1, "web": 1, "magma": 1, "venom": 1, "glass": 2, "gold": 2, "curse": 1, "jar": 2}
@@ -229,6 +231,10 @@ var danger_shown := -1
 var mound_col := Color(0.8, 0.65, 0.4)
 var shaft_sand := 0
 var shaft0 := 1
+var door_sand := 0          # grains touching the door: these are what hold it shut
+var door0 := 1
+var dig_path_t := 0.0       # Sealed Chamber: how long a finished path has gone without draining
+var dig_check := 0.0
 var door_swing := 0.0      # 0 closed (edge on) .. 1 swung open
 var safe_x := 0.0
 var safe_glow := 0.0
@@ -489,6 +495,8 @@ func start_level(i: int) -> void:
 	dig = SEALED_CHAMBER_ON and not L.boss and str(L.get("trap", "")) != ""
 	dug.clear()
 	dig_out = 0
+	dig_path_t = 0.0
+	dig_check = 0.0
 	if dig:
 		# the debris only just reaches into the board: the player digs the rest of the way down
 		for id in rubble.keys():
@@ -534,6 +542,7 @@ func start_level(i: int) -> void:
 	shaft_cap = (BY - shaft.y0 - 5) * (shaft.x1 - shaft.x0)
 	shaft0 = shaft_cap
 	shaft_sand = _count_shaft()
+	door0 = maxi(1, door_sand)
 	last_grains = grains
 	_compute_active_region()
 	# the wider debris area holds more sand; most of it slides into the drain, so give moves for it
@@ -603,7 +612,7 @@ func start_level(i: int) -> void:
 	_place_hero()
 	bg_layer.queue_redraw()
 	frame_layer.queue_redraw()
-	ui.set_level(i + 1, ("BOSS · " + BOSSES[L.hazard].name) if L.boss else L.name, theme.ui)
+	ui.set_level(i + 1, BOSSES[L.hazard].name if L.boss else L.name, theme.ui)
 	mode = "drain" if dig else L.get("mode", "drain")
 	wrapped.clear()
 	runes.clear()
@@ -884,7 +893,7 @@ func has_special() -> Vector2i:
 	for r in ROWS:
 		for c in COLS:
 			var m = grid[r][c]
-			if m != null and m.kind != "gem":
+			if m != null and m.kind != "gem" and not wrapped.has(r * COLS + c):
 				return Vector2i(c, r)
 	return Vector2i(-1, -1)
 
@@ -1041,7 +1050,7 @@ func damage_rubble(id: int, power := false, depth := 0) -> void:
 	_update_hud()
 
 func _update_hud() -> void:
-	var p := maxi(0, ceili(shaft_sand * 100.0 / shaft0))
+	var p := clampi(ceili(door_sand * 100.0 / door0), 0, 100)
 	if dig:
 		p = 100 - _dig_depth()   # how far the debris still has to go to reach the bottom
 	hud_pct = p
@@ -1064,7 +1073,19 @@ func _block_has_sand(id: int) -> bool:
 				return true
 	return false
 
+## Grains pressing on the door itself (a thin strip right behind it).
+func _count_door() -> int:
+	var n := 0
+	var xa: int = shaft.x0 if facing > 0 else shaft.x1 - 4
+	for y in range(room.y0 + 1, BY):
+		for x in range(xa, xa + 4):
+			if sand[y * SW + x] != 0:
+				n += 1
+	door_sand = n
+	return n
+
 func _count_shaft() -> int:
+	_count_door()
 	var n := 0
 	for y in range(shaft.y0, BY):
 		for x in range(shaft.x0, shaft.x1):
@@ -1077,7 +1098,7 @@ func _door_face() -> float:
 	return door_col + 0.5 - facing * DOOR_EDGE_W / 2.0
 
 func door_ready() -> bool:
-	return shaft_sand <= maxi(4, roundi(shaft0 * 0.02))
+	return door_sand <= 3
 
 ## The level's goal: the door is free, plus any extra goal the mode adds.
 func goal_done() -> bool:
@@ -1124,6 +1145,71 @@ func _dig_drain() -> void:
 		sand_dirty = true
 		sand_sleep = false
 
+## Every open cell the debris can flow into: start from cells holding debris, go down or sideways.
+func _dig_reach() -> Dictionary:
+	var todo := []
+	var seen := {}
+	for id in rubble:
+		if _block_has_sand(id):
+			todo.append(id)
+			seen[id] = true
+	var i := 0
+	while i < todo.size():
+		var cur: int = todo[i]
+		i += 1
+		var c: int = cur % COLS
+		var r: int = cur / COLS
+		for d in [Vector2i(0, 1), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(1, 1), Vector2i(-1, 1)]:
+			var nc: int = c + d.x
+			var nr: int = r + d.y
+			var nid := nr * COLS + nc
+			if in_b(nc, nr) and rubble.has(nid) and not seen.has(nid):
+				seen[nid] = true
+				todo.append(nid)
+	return seen
+
+## True when the holes connect the debris to the bottom of the board.
+func _dig_path_open() -> bool:
+	var reach := _dig_reach()
+	for c in COLS:
+		if reach.has((ROWS - 1) * COLS + c):
+			return true
+	return false
+
+## Close one dug hole again with a fresh gem.
+func _dig_close(id: int) -> void:
+	dug.erase(id)
+	rubble.erase(id)
+	var c: int = id % COLS
+	var r: int = id / COLS
+	for y in range(BY + r * CELL, BY + (r + 1) * CELL):
+		for x in range(BX + c * CELL, BX + (c + 1) * CELL):
+			if sand[y * SW + x] != 0:
+				sand[y * SW + x] = 0
+				grains -= 1
+			mask[y * SW + x] = 0
+	# pick a colour that does not make a ready-made line, so closed holes don't chain into free matches
+	var k := randi() % NCOL
+	for _t in 12:
+		var h := 1
+		var v := 1
+		for d in [-1, 1]:
+			var x: int = c + d
+			while color_at(x, r) == k:
+				h += 1
+				x += d
+			var y: int = r + d
+			while color_at(c, y) == k:
+				v += 1
+				y += d
+		if h < 3 and v < 3:
+			break
+		k = (k + 1) % NCOL
+	var m := _new_gem(c, r, k)
+	m.scale = 0.0
+	grid[r][c] = m
+	tween(m, {"scale": 1.0}, 0.25, "back")
+
 ## How deep the debris has got: 0 at the top of the board, 100 at the bottom.
 func _dig_depth() -> int:
 	for y in range(BY + ROWS * CELL - 1, BY - 1, -1):
@@ -1137,19 +1223,8 @@ func _dig_depth() -> int:
 func _dig_refill() -> void:
 	ui.toast("Fresh gems!")
 	for id in dug.keys():
-		if _block_has_sand(id):
-			continue
-		dug.erase(id)
-		rubble.erase(id)
-		var c: int = id % COLS
-		var r: int = id / COLS
-		for y in range(BY + r * CELL, BY + (r + 1) * CELL):
-			for x in range(BX + c * CELL, BX + (c + 1) * CELL):
-				mask[y * SW + x] = 0
-		var m := _new_gem(c, r, randi() % NCOL)
-		m.scale = 0.0
-		grid[r][c] = m
-		tween(m, {"scale": 1.0}, 0.25, "back")
+		if not _block_has_sand(id):
+			_dig_close(id)
 	bg_layer.queue_redraw()
 	await wait(0.3)
 
@@ -1313,6 +1388,17 @@ func collapse() -> void:
 			for c in COLS:
 				if grid[r][c] == null and not is_rub(c, r):
 					_dig_cell(c, r)
+		# holes the debris cannot flow into close up again with fresh gems, so matches made
+		# away from the debris never leave the board empty or the player without moves
+		var reach := _dig_reach()
+		var closed := 0
+		for id in dug.keys():
+			if not reach.has(id):
+				_dig_close(id)
+				closed += 1
+		if closed > 0:
+			bg_layer.queue_redraw()
+			await wait(0.25)
 		await _wait_settled()
 		return
 	for c in COLS:
@@ -1743,6 +1829,9 @@ func activate(c: int, r: int) -> void:
 	var m = grid[r][c]
 	if m == null or m.kind == "gem":
 		return
+	if wrapped.has(r * COLS + c):
+		ui.toast("It's stuck! Match next to it first.")
+		return
 	state = "busy"
 	hint = []
 	selected = Vector2i(-1, -1)
@@ -1978,7 +2067,7 @@ func _lose(timed_out := false) -> void:
 	await wait(1.0)
 	if gen != level_gen:
 		return
-	var left = ceili(shaft_sand * 100.0 / shaft0) if shaft_sand > 0 else 0
+	var left = clampi(ceili(door_sand * 100.0 / door0), 0, 100)
 	meta.log_event("level_end", {"level": level_idx + 1, "mode": mode, "result": "lost", "moves_left": 0,
 		"sand_left": left, "seconds": int(time - level_t0), "boosters": boosters_used, "timed_out": timed_out}, self)
 	ui.show_lose(left, "Out of moves!" if not timed_out else (TRAP_INFO[trap].lose if trap != "" else ("The boss got Zaki!" if L.boss else "Pushed into the spikes!")))
@@ -2038,12 +2127,12 @@ func select_level(i: int) -> void:
 		var acts := []
 		for a in bd.attacks:
 			acts.append(ATTACK_TEXT[a].split("!")[0])
-		text = bd.name + " waits behind Zaki instead of the spikes, and every %d moves it %s. " % [BOSS_EVERY, " or ".join(acts)] + text
+		text = "%s attacks every %d moves: it %s." % [bd.name, BOSS_EVERY, " or ".join(acts)]
 	var title: String = MODES[m].title
 	var tk := str(lv.get("trap", "")) if SEALED_CHAMBER_ON and not lv.boss else ""
 	if tk != "":
 		title = "Sealed Chamber"
-		text = TRAP_INFO[tk].text + "\n\n" + MODE_SHORT[m]
+		text = TRAP_INFO[tk].text
 	ui.show_intro(i, lv.boss, title, text, load(badge) if ResourceLoader.exists(badge) else null)
 
 func begin_level(i: int, pre: Array) -> void:
@@ -2179,6 +2268,14 @@ func _hammer_at(cell: Vector2i) -> void:
 
 # ---------- tutorial and tips ----------
 func _tutorial_start() -> void:
+	if dig:
+		# Sealed Chamber: say the goal in one line every time, and point at a good first move
+		ui.set_tip("Match gems to dig. Make a path to the bottom!", 7.0)
+		var dm := all_moves()
+		dm.sort_custom(func(a, b): return _near_rub(a[0].x, a[0].y) + _near_rub(a[1].x, a[1].y) > _near_rub(b[0].x, b[0].y) + _near_rub(b[1].x, b[1].y))
+		if not dm.is_empty() and not meta.seen("tut_dig"):
+			tut_move = dm[0]
+		return
 	if level_idx == 0 and not meta.seen("tut_swipe"):
 		var ms := all_moves()
 		var deep := 0.25 if dig else 0.0
@@ -2196,6 +2293,10 @@ func _tutorial_start() -> void:
 func _tutorial_swapped() -> void:
 	if not tut_move.is_empty():
 		tut_move = []
+		if dig:
+			meta.mark("tut_dig")
+			ui.set_tip("The sand pours into the holes. Keep digging down!", 5.0)
+			return
 		meta.mark("tut_swipe")
 		ui.set_tip("Great! Keep going. When no sand is left against the door, Zaki escapes.", 5.0)
 
@@ -2341,7 +2442,9 @@ func _sand_step() -> int:
 				var nx = x + d
 				if nx >= ax0 and nx < ax1:
 					var j: int = b + d
-					if mask[j] == 1 and sand[j] == 0 and mask[i + d] == 1 and sand[i + d] == 0:
+					# normally a grain needs room beside it to roll; in dug tunnels it may also squeeze
+					# round the corner between two holes that only touch diagonally
+					if mask[j] == 1 and sand[j] == 0 and ((mask[i + d] == 1 and sand[i + d] == 0) or (dig and y >= BY - 1 and mask[i + d] == 0)):
 						sand[j] = v
 						sand[i] = 0
 						moved += 1
@@ -2353,7 +2456,7 @@ func _sand_step() -> int:
 				for _t in 2:
 					var j2: int = i + d
 					var st := 1
-					while st <= 28 and mask[j2] == 1 and sand[j2] == 0:
+					while st <= 56 and mask[j2] == 1 and sand[j2] == 0:
 						if mask[j2 + SW] == 1 and sand[j2 + SW] == 0:
 							sand[i + d] = v
 							sand[i] = 0
@@ -2442,12 +2545,20 @@ func _process(dt: float) -> void:
 			_upload_sand()
 		if not shaft.is_empty():
 			shaft_sand = _count_shaft()
-			var pc := maxi(0, ceili(shaft_sand * 100.0 / shaft0))
+			var pc := clampi(ceili(door_sand * 100.0 / door0), 0, 100)
 			if pc != hud_pct:
 				_update_hud()
 		if (state == "idle" or state == "busy") and trap != "":
 			# Sealed Chamber: the threat closes in with time, whatever the debris does
 			_dig_drain()
+			# safety net: a finished path that somehow is not draining opens anyway
+			dig_check -= dt
+			if dig and dig_out < DIG_WIN and dig_check <= 0.0:
+				dig_check = 0.5
+				dig_path_t = (dig_path_t + 0.5) if _dig_path_open() else 0.0
+				if dig_path_t >= 2.5:
+					ui.toast("The debris is draining out!")
+					dig_out = DIG_WIN
 			trap_stun = maxf(0.0, trap_stun - dt)
 			if trap_stun <= 0.0:
 				hz_p = clampf(hz_p + dt / trap_time, 0.0, 1.0)
@@ -2867,6 +2978,25 @@ func _draw_snake(ci: CanvasItem) -> void:
 		pts.append(Vector2(wx(p.x), wy(p.y)))
 		dirs.append(ang)
 		p += Vector2.from_angle(ang) * step
+	# real art when it exists: assets/gfx/trap/snake_head.png (pointing right) and snake_body.png (one round segment)
+	if snake_tex.is_empty():
+		for k in ["head", "body"]:
+			var sp := "res://assets/gfx/trap/snake_%s.png" % k
+			snake_tex[k] = load(sp) if ResourceLoader.exists(sp) else null
+	if snake_tex.head != null and snake_tex.body != null:
+		var bt: Texture2D = snake_tex.body
+		var ht: Texture2D = snake_tex.head
+		var seg := r * 2.5
+		for i in range(0, n + 1, 2):
+			ci.draw_set_transform(pts[i], dirs[i], Vector2.ONE)
+			ci.draw_texture_rect(bt, Rect2(-seg / 2.0, -seg / 2.0, seg, seg), false)
+		var hw := r * 4.6
+		var hh := hw * ht.get_height() / ht.get_width()
+		var bite := 1.0 + 0.12 * clampf((hz_p - 0.75) / 0.25, 0.0, 1.0) * absf(sin(time * 8.0))
+		ci.draw_set_transform(pts[n], dirs[n], Vector2(bite, bite if cos(dirs[n]) >= -0.2 else -bite))
+		ci.draw_texture_rect(ht, Rect2(-hw * 0.3, -hh / 2.0, hw, hh), false)
+		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
 	# the hole it comes out of
 	var hole := Vector2(wx(x_in), wy(y_in - 0.3))
 	ci.draw_set_transform(hole, 0.0, Vector2(1.0, 0.45))
@@ -3141,7 +3271,7 @@ func _draw_frame_inner(ci: CanvasItem) -> void:
 	var far = rx0 if facing > 0 else rx1
 	# pillars: the wall the door sits in (open at the top) and the room's far wall
 	var wall_x = (sx0 - t * 0.5) if facing > 0 else (sx1 + t * 0.5)
-	_tile_v(ci, tex.pillar, wall_x, sy - t * 0.5, by, t)
+	_tile_v(ci, tex.pillar, wall_x, sy - t * 0.5, ry, t)
 	_tile_v(ci, tex.pillar, far, ry, by, t * 0.9)
 	# carved beams: over the room and the floor ledge above the board
 	_tile_h(ci, tex.frieze, minf(rx0, rx1) - t * 0.4, maxf(rx0, rx1) + t * 0.4, ry - t * 0.2, t)
@@ -3155,7 +3285,7 @@ func _draw_door(ci: CanvasItem) -> void:
 	var bot = wy(BY) - g * 0.2
 	var h = bot - top
 	var heave: float = 0.5 + 0.5 * sin(push_ph) if hero_pose == "push" else 0.0
-	var free := 1.0 - float(shaft_sand) / float(shaft0)
+	var free := clampf(1.0 - float(door_sand) / float(door0), 0.0, 1.0)
 	var jit := facing * (heave * 0.12 + door_hit * 0.25) * g * (0.4 + free)
 	var w := DOOR_EDGE_W * g
 	# opening: the door slides up into the ceiling, so only its lower part stays visible
@@ -3210,6 +3340,15 @@ func _draw_gems(ci: CanvasItem) -> void:
 	var S = CELL * g * 0.92
 	var board_top = wy(BY) - CELL * g * 0.35
 	_draw_runes(ci)
+	if dig and state != "won":
+		# bouncing arrows under the board: this is where the sand has to get out
+		var by2 := wy(BY + ROWS * CELL) + g * 1.2
+		var bob := absf(sin(time * 3.0)) * g * 1.2
+		for c in COLS:
+			var ax := cell_cx(c)
+			var a := 0.55 + 0.35 * sin(time * 3.0 + c * 0.6)
+			var tip := Vector2(ax, by2 + g * 2.6 + bob)
+			ci.draw_colored_polygon(PackedVector2Array([Vector2(ax - g * 1.6, by2 + bob), Vector2(ax + g * 1.6, by2 + bob), tip]), Color(1.0, 0.85, 0.3, a))
 	if selected.x >= 0:
 		var c = Vector2(cell_cx(selected.x), cell_cy(selected.y))
 		var sb := StyleBoxFlat.new()
@@ -3406,7 +3545,7 @@ func _draw_add(ci: CanvasItem) -> void:
 		var wdt := absf(_hazard_front() - far) * g
 		_draw_tex_centered(ci, glow_tex, Vector2(mid, wy(BY - 2.0)), Vector2(wdt * 1.6 + g * 8.0, g * 14.0), 0.0, Color(1.0, 0.45, 0.1, 0.55))
 	if not shaft.is_empty():
-		var free := 1.0 - float(shaft_sand) / float(shaft0)
+		var free := clampf(1.0 - float(door_sand) / float(door0), 0.0, 1.0)
 		var leak := clampf((free - 0.55) / 0.45, 0.0, 1.0)
 		if leak > 0.0 and door_swing <= 0.0:
 			var dx := wx(door_col + 0.5) + facing * DOOR_EDGE_W * g * 0.5
@@ -3455,6 +3594,8 @@ const WORLD_FX := [
 	{"src": "pipe", "col": Color("d9a530"), "glow": Color(0.75, 0.4, 1.0)},
 ]
 var amb_t := {}
+var src_tex := {}          # world index -> art for its debris source (or null)
+var snake_tex := {}        # "head" / "body" art for the Sealed Chamber snake (or null)
 
 func _every(key: String, rate: float, dt: float) -> int:
 	# how many things to spawn this frame for an effect running at `rate` per second
@@ -3567,17 +3708,32 @@ func _draw_source(ci: CanvasItem) -> void:
 	var u := g * 1.25
 	var pouring := pour_left > 0.0
 	var jig := sin(time * 40.0) * u * 0.25 if pouring else 0.0
-	# the falling stream (the grains themselves come from the sand simulation)
+	# the falling stream: real grains tumbling down to the pile
 	if pouring:
 		var top_y: int = shaft.y0
 		var cx := int(pour_x)
 		while top_y < BY and sand[top_y * SW + cx] == 0:
 			top_y += 1
-		var sc: Color = theme.gtint
-		ci.draw_rect(Rect2(x - u * 0.9, y, u * 1.8, wy(top_y) - y), Color(sc, 0.55))
-		for k in 3:
-			var off := fmod(time * 300.0 * g / 6.0 + k * 60.0, maxf(1.0, wy(top_y) - y))
-			ci.draw_line(Vector2(x + (k - 1) * u * 0.5, y + off), Vector2(x + (k - 1) * u * 0.5, minf(wy(top_y), y + off + u * 3.0)), sc.lightened(0.3), maxf(1.0, u * 0.25))
+		var fall := maxf(g, wy(top_y) - y)
+		var grav := 900.0 * g / 6.0
+		var life := sqrt(2.0 * fall / grav) + 0.05
+		for k in 4:
+			parts.append({"x": x + (randf() - 0.5) * u * 2.6, "y": y + randf() * u, "vx": (randf() - 0.5) * 30.0 * g / 6.0, "vy": randf() * 40.0 * g / 6.0,
+				"life": 0.0, "max": life, "col": theme.gtint, "v": 1 + randi() % 3, "size": g * 1.5, "grav": grav, "kind": "grain"})
+		if randf() < 0.3:
+			parts.append({"x": x + (randf() - 0.5) * u * 3.0, "y": wy(top_y), "vx": (randf() - 0.5) * 60.0 * g / 6.0, "vy": -30.0 * g / 6.0, "life": 0.0, "max": 0.7,
+				"col": Color(mound_col.lightened(0.3), 0.6), "size": g * 1.4, "grav": 0.0, "kind": "puff"})
+	# the world's own art for the source, when it exists (assets/gfx/sources/source_<world>.png)
+	var st_path := "res://assets/gfx/sources/source_%d.png" % (w + 1)
+	if not src_tex.has(w):
+		src_tex[w] = load(st_path) if ResourceLoader.exists(st_path) else null
+	if src_tex[w] != null:
+		var st: Texture2D = src_tex[w]
+		var sw_px := u * 11.0
+		var sh_px := sw_px * st.get_height() / st.get_width()
+		var bounce := absf(sin(time * 18.0)) * u * 0.35 if pouring else 0.0
+		ci.draw_texture_rect(st, Rect2(x - sw_px / 2.0 + jig, y + u * 0.6 - sh_px - bounce, sw_px, sh_px), false)
+		return
 	match d.src:
 		"crack":
 			var pts := PackedVector2Array()
@@ -3815,6 +3971,35 @@ func _boss_attack() -> void:
 			_raise_rubble(2)
 		"burrow":
 			_raise_rubble(3)
+		"sting":
+			hz_p = minf(0.97, hz_p + 0.08)
+			if mode != "race":
+				moves = maxi(1, moves - 1)
+			fx.append({"kind": "ring", "x": wx(hero_x), "y": wy(BY - 8.0), "r0": g, "r1": CELL * g * 1.5, "life": 0.0, "max": 0.4, "col": Color(0.7, 1.0, 0.3, 0.8)})
+		"steal":
+			if mode != "race":
+				moves = maxi(1, moves - 2)
+			fx.append({"kind": "ring", "x": mouth.x, "y": mouth.y, "r0": g * 2.0, "r1": CELL * g * 3.0, "life": 0.0, "max": 0.6, "col": Color(1.0, 0.85, 0.3, 0.8)})
+		"burn":
+			# two quick extra bursts of debris
+			pour_burst(2.0, 1.5)
+			pour_cd = minf(pour_cd, 4.0)
+			for k in 14:
+				parts.append({"x": mouth.x, "y": mouth.y, "vx": facing * (200.0 + randf() * 300.0) * g / 6.0, "vy": (randf() - 0.5) * 160.0 * g / 6.0, "life": 0.0, "max": 0.6, "col": Color(1.0, 0.5, 0.1, 0.9), "size": g * 0.8, "grav": 0.0, "kind": "mote"})
+		"scramble":
+			await _shuffle("The gems swap places!")
+		"eat":
+			# every power-up on the board gets wrapped in web; with none to grab, plain gems get it
+			var grabbed := 0
+			for r in ROWS:
+				for c in COLS:
+					var sm = grid[r][c]
+					if sm != null and sm.kind != "gem" and not wrapped.has(r * COLS + c) and grabbed < 3:
+						wrapped[r * COLS + c] = {"t": "web", "hp": 1, "goal": false}
+						fx.append({"kind": "bolt", "x0": mouth.x, "y0": mouth.y, "x1": cell_cx(c), "y1": cell_cy(r), "life": 0.0, "max": 0.3})
+						grabbed += 1
+			if grabbed == 0:
+				_cover_random("web", 2, mouth)
 		"roar":
 			hz_p = minf(0.97, hz_p + 0.12)
 			fx.append({"kind": "ring", "x": mouth.x, "y": mouth.y, "r0": g * 2.0, "r1": CELL * g * 3.0, "life": 0.0, "max": 0.5, "col": Color(1, 1, 1, 0.6)})
@@ -3994,6 +4179,10 @@ func _run_autotest() -> void:
 	show_map()
 	await wait(1.0)
 	await _shot("99_map")
+	for sv in [9, 29, 69]:
+		ui.map_view.scroll_to(sv)
+		await wait(0.6)
+		await _shot("97_seam_%d" % (sv + 1))
 	for wv in [3, 5]:
 		ui.map_view.scroll_to(wv * 10 + 4)
 		await wait(0.8)

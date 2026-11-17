@@ -29,6 +29,7 @@ var menu_btn: Button
 var lvl_label: Label
 var name_label: Label
 var time_label: Label
+var danger_bar: DangerBar
 var extra_label: Label
 var extra_icon: TextureRect
 var moves_panel: PanelContainer
@@ -71,6 +72,34 @@ var pre_sel := {}
 var pre_btns := {}
 var nolives_timer: Label
 var sec_t := 0.0
+
+## A slim bar that fills as the danger gets closer to Zaki.
+class DangerBar extends Control:
+	var p := 0.0
+	var label := "DANGER"
+	var pouring := false
+	var font: Font
+	func _draw() -> void:
+		var r := size.y / 2.0
+		var bg := StyleBoxFlat.new()
+		bg.bg_color = Color(0.08, 0.06, 0.14, 0.9)
+		bg.border_color = Color("b9821c")
+		bg.set_border_width_all(2)
+		bg.set_corner_radius_all(int(r))
+		draw_style_box(bg, Rect2(Vector2.ZERO, size))
+		var col := Color("5fd17a").lerp(Color("ffd36b"), clampf(p * 2.0, 0.0, 1.0)).lerp(Color("ff5a4a"), clampf(p * 2.0 - 1.0, 0.0, 1.0))
+		if pouring:
+			col = col.lerp(Color("ffb347"), 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012))
+		var w := maxf(size.y - 6.0, (size.x - 6.0) * clampf(p, 0.0, 1.0))
+		var fill := StyleBoxFlat.new()
+		fill.bg_color = col
+		fill.set_corner_radius_all(int(r))
+		draw_style_box(fill, Rect2(3, 3, w, size.y - 6.0))
+		var txt: String = "INCOMING!" if pouring else label
+		var fs := int(size.y * 0.68)
+		var tw := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		draw_string_outline(font, Vector2((size.x - tw) / 2.0, size.y * 0.72), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0.08, 0.06, 0.14))
+		draw_string(font, Vector2((size.x - tw) / 2.0, size.y * 0.72), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
 
 class Ring extends Control:
 	var p := 100.0
@@ -303,6 +332,11 @@ func build() -> void:
 	hud.add_child(name_label)
 	time_label = _label("1:50", font_display, 30, INK)
 	hud.add_child(time_label)
+	time_label.visible = false
+	danger_bar = DangerBar.new()
+	danger_bar.font = font_black
+	danger_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(danger_bar)
 	extra_label = _label("", font_black, 24, Color("efe2c4"))
 	hud.add_child(extra_label)
 	extra_icon = TextureRect.new()
@@ -527,6 +561,8 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	moves_panel.custom_minimum_size = Vector2(120, 96)
 	moves_panel.size = Vector2(120, 96)
 	name_label.size = Vector2(maxf(60.0, moves_panel.position.x - name_label.position.x - 12), 34)
+	danger_bar.position = Vector2(pad + 98, top + 86)
+	danger_bar.size = Vector2(name_label.size.x, 32)
 	var tw = minf(vs.x - 60.0, 600.0)
 	toast_panel.custom_minimum_size = Vector2(tw, 0)
 	toast_panel.size = Vector2(tw, 0)
@@ -544,9 +580,10 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 	bar_coins.position = Vector2(pad - 6.0, 28.0)
 	bar_coins.size = Vector2(0, 0)
 	var tpw := minf(vs.x - 40.0, 640.0)
+	tip_label.custom_minimum_size = Vector2(tpw - 48.0, 0)   # fixed width, so wrapped text measures its real height
 	tip_panel.custom_minimum_size = Vector2(tpw, 0)
 	tip_panel.size = Vector2(tpw, 0)
-	tip_panel.position = Vector2((vs.x - tpw) / 2.0, bottom - 150.0)
+	tip_panel.position = Vector2((vs.x - tpw) / 2.0, top + HUD_H + 4.0)   # over the room, never over the board or boosters
 	praise_label.size = Vector2(vs.x, 120)
 	praise_label.position = Vector2(0, vs.y * 0.36)
 	praise_label.pivot_offset = praise_label.size / 2.0
@@ -583,16 +620,15 @@ func layout(vs: Vector2, safe: Vector2) -> void:
 func set_level(n: int, title: String, col: Color) -> void:
 	lvl_label.text = "Level %d" % n
 	name_label.text = title
+	name_label.add_theme_font_size_override("font_size", 25 if title.length() <= 15 else 21)
 	ring.col = col
 	ring.queue_redraw()
 
 func update_danger(p: float, pouring: bool, label := "Danger") -> void:
-	if pouring:
-		time_label.text = "Debris incoming!"
-		time_label.add_theme_color_override("font_color", Color("ffb347"))
-	else:
-		time_label.text = "%s %d%%" % [label, roundi(p * 100.0)]
-		time_label.add_theme_color_override("font_color", Color("ff6b5b") if p > 0.7 else (Color("ffd36b") if p > 0.4 else INK))
+	danger_bar.p = p
+	danger_bar.pouring = pouring
+	danger_bar.label = label.to_upper()
+	danger_bar.queue_redraw()
 
 func set_extra(text: String) -> void:
 	extra_icon.visible = false
@@ -616,7 +652,9 @@ func set_tip(text: String, hold := 0.0) -> void:
 		return
 	tip_label.text = text
 	tip_panel.visible = true
+	tip_panel.size = Vector2(tip_panel.custom_minimum_size.x, 0)
 	tip_panel.reset_size()
+	tip_panel.size = tip_panel.get_combined_minimum_size()
 	tip_panel.position.x = (vsize.x - tip_panel.size.x) / 2.0
 	tip_panel.modulate.a = 0.0
 	tip_tw = create_tween()

@@ -75,21 +75,38 @@ func seg_top(w: int) -> float:
 func world_at(y: float) -> int:
 	return clampi(int((total_h() - bottom_pad + WORLD_GAP * 0.5 - y) / (10 * SPACING + WORLD_GAP)), 0, game.WORLDS.size() - 1)
 
-## The Nile's centre line: traced from the world's map image when there is one, otherwise an S-curve.
-## Both meet the middle of the screen at every world's top and bottom edge, so the worlds join up.
-func river_x(y: float) -> float:
-	var w := world_at(y)
-	var f := clampf((seg_bot(w) - y) / (seg_bot(w) - seg_top(w)), 0.0, 1.0)
+## Neighbouring world images overlap by this much on each side of the border and
+## dissolve into each other, so the Nile runs on without a visible cut.
+const SEAM := 130.0
+
+## The river's x for one world's image at map height y (the image covers the segment plus SEAM on both ends).
+func _river_in(w: int, y: float) -> float:
+	var top := seg_top(w) - SEAM
+	var bot := seg_bot(w) + SEAM
+	var f := clampf((bot - y) / (bot - top), 0.0, 1.0)
 	if river_trace.has(w) and map_tex.has(w):
 		var tr: Array = river_trace[w]
 		var fi := f * (tr.size() - 1)
 		var k := int(fi)
 		var frac: float = lerpf(float(tr[k]), float(tr[mini(k + 1, tr.size() - 1)]), fi - k)
 		var tex: Texture2D = map_tex[w]
-		var disp_w: float = (seg_bot(w) - seg_top(w)) * tex.get_width() / tex.get_height()
+		var disp_w: float = (bot - top) * tex.get_width() / tex.get_height()
 		return size.x * 0.5 + (frac - 0.5) * disp_w
 	var sgn := 1.0 if w % 2 == 0 else -1.0
 	return size.x * 0.5 + size.x * (0.2 * sin(TAU * f) * sgn + 0.05 * sin(3.0 * PI * f))
+
+## The Nile's centre line. Near a border between two worlds it glides from one image's river to the next.
+func river_x(y: float) -> float:
+	var w := world_at(y)
+	var x := _river_in(w, y)
+	var n: int = game.WORLDS.size()
+	if w + 1 < n and y < seg_top(w) + SEAM:
+		var t := clampf((seg_top(w) + SEAM - y) / (2.0 * SEAM), 0.0, 1.0)
+		x = lerpf(x, _river_in(w + 1, y), t * t * (3.0 - 2.0 * t))
+	elif w > 0 and y > seg_bot(w) - SEAM:
+		var t := clampf((y - (seg_bot(w) - SEAM)) / (2.0 * SEAM), 0.0, 1.0)
+		x = lerpf(x, _river_in(w - 1, y), t * t * (3.0 - 2.0 * t))
+	return x
 
 func scroll_to(i: int) -> void:
 	scroll = clampf(node_pos(i).y - size.y * 0.58, 0.0, maxf(0.0, total_h() - size.y))
@@ -145,19 +162,30 @@ func _draw() -> void:
 		var wd: Dictionary = game.WORLDS[w]
 		var y_top := seg_top(w) - scroll
 		var y_bot := seg_bot(w) - scroll
-		if y_bot < -50 or y_top > size.y + 50:
+		if y_bot + SEAM < -50 or y_top - SEAM > size.y + 50:
 			continue
 		var r := Rect2(0, y_top, W, y_bot - y_top)
 		if map_tex.has(w):
+			# the image runs SEAM past both borders; where it lies over the world below it fades in
 			var mt: Texture2D = map_tex[w]
-			var dw: float = r.size.y * mt.get_width() / mt.get_height()
+			var e_top := y_top - SEAM
+			var e_h := (y_bot - y_top) + 2.0 * SEAM
+			var dw: float = e_h * mt.get_width() / mt.get_height()
 			var src_w: float = mt.get_width() * minf(1.0, W / dw)
-			draw_texture_rect_region(mt, r, Rect2((mt.get_width() - src_w) * 0.5, 0, src_w, mt.get_height()))
+			var sx: float = (mt.get_width() - src_w) * 0.5
+			var ih: float = mt.get_height()
+			var solid_h := e_h - (2.0 * SEAM if w > 0 else 0.0)
+			draw_texture_rect_region(mt, Rect2(0, e_top, W, solid_h), Rect2(sx, 0, src_w, ih * solid_h / e_h))
+			if w > 0:
+				var strips := 26
+				var sh := 2.0 * SEAM / strips
+				for k in strips:
+					var a := 1.0 - (k + 0.5) / strips
+					a = a * a * (3.0 - 2.0 * a)
+					var yy := e_top + solid_h + k * sh
+					draw_texture_rect_region(mt, Rect2(0, yy, W, sh + 0.5), Rect2(sx, ih * (solid_h + k * sh) / e_h, src_w, ih * sh / e_h), Color(1, 1, 1, a))
 		else:
 			_draw_land(w, r)
-		# soft blend between worlds
-		_vgrad(Rect2(0, y_top - 1, W, 70), Color(0.08, 0.06, 0.14, 0.7), Color(0.08, 0.06, 0.14, 0))
-		_vgrad(Rect2(0, y_bot - 70, W, 71), Color(0.08, 0.06, 0.14, 0), Color(0.08, 0.06, 0.14, 0.7))
 		# world banner at the start of each world
 		var by := y_bot - WORLD_GAP * 0.42
 		var title := "World %d · %s" % [w + 1, wd.name]
