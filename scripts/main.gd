@@ -10,7 +10,7 @@ const Puppet := preload("res://scripts/puppet.gd")
 const FramesData := preload("res://scripts/frames_data.gd")
 const LevelsData := preload("res://scripts/levels_data.gd")
 const Meta := preload("res://scripts/meta.gd")
-const HERO_H := 15.0      # hero height in world cells
+const HERO_H := 13.5      # hero height in world cells
 const ROOM_H := 24
 const SPIKE_W := 6.0
 const DOOR_EDGE_W := 2.6   # side view of the door, in cells
@@ -605,7 +605,8 @@ func start_level(i: int, override := {}) -> void:
 	safe_x = (area.x1 - sw_cells / 2.0 - 0.6) if facing > 0 else (area.x0 + sw_cells / 2.0 + 0.6)
 	hero_lift = 0.0
 	hero_alpha = 1.0
-	push_max = maxf(4.0, absf(_door_face() - _hazard_front()) - 8.5)
+	_fit_boss()
+	push_max = maxf(4.0, absf(_door_face() - _hazard_front()) - ZAKI_W)   # Zaki loses the moment he touches the threat
 	golem_attack = 0.0
 	look_t = 0.0
 	boss_kind = L.hazard if L.boss else ""
@@ -2986,17 +2987,33 @@ func _hero_frames(dt: float) -> void:
 			parts.append({"x": hp.x, "y": hp.y, "vx": -facing * (20.0 + randf() * 40.0), "vy": -40.0, "life": 0.0, "max": 0.7,
 				"col": Color(0.7, 0.88, 1.0, 0.9), "size": g * 0.35, "grav": 600.0, "kind": "dot"})
 
-const BOSS_H := 21.0
+## How far a puppet boss's arms or strike reach in front of its body (as a share of its width).
+const PUPPET_REACH := {"golem": 1.5, "cobra": 1.4, "mummy": 1.3}
+const ZAKI_W := 13.0         # room Zaki takes up while leaning on the door (cells)
+const BOSS_H := 17.0       # tallest a boss is drawn (cells); smaller when its room is narrow
+var boss_k := 1.0           # boss size factor for this level, so there is always a clear gap to Zaki
+
+## Size the boss so that, when Zaki stands at the door, there is a real gap between them
+## (at least 12 cells, or 35% of the room). They only meet when the player loses.
+func _fit_boss() -> void:
+	boss_k = 1.0
+	if boss_kind == "":
+		return
+	var room_w := absf(float(room.x1 - room.x0))
+	var free_w := room_w - ZAKI_W - maxf(12.0, room_w * 0.3)
+	var natural := _hazard_width()
+	if natural > free_w:
+		boss_k = clampf(free_w / natural, 0.6, 1.0)
 
 func _hazard_width() -> float:
 	var hz: String = boss_base if boss_base != "" else L.get("hazard", "")
 	if hz == "spikes":
 		return SPIKE_W
 	if boss_tex != null:
-		return BOSS_H * boss_tex.get_width() / boss_tex.get_height() * 0.8
+		return BOSS_H * boss_k * boss_tex.get_width() / boss_tex.get_height()
 	if chasers.has(hz):
 		var pp: Puppet = chasers[hz]
-		return pp.size.x * CHASER_H[hz] / pp.size.y
+		return pp.size.x * CHASER_H[hz] * boss_k / pp.size.y * PUPPET_REACH.get(hz, 1.3)   # arms and tail reach past the body
 	return 0.0
 
 func _hazard_front() -> float:
@@ -3039,7 +3056,7 @@ func _anim(dt: float) -> void:
 		roar_t += dt
 		if state == "lost":
 			golem_attack = minf(1.0, golem_attack + dt * 1.2)
-		var bh := BOSS_H * g
+		var bh := BOSS_H * boss_k * g
 		var bs := bh / boss_tex.get_height()
 		var breathe := 1.0 + sin(hero_t * 2.2) * 0.025
 		var lunge := golem_attack * 3.0 * g
@@ -3062,8 +3079,9 @@ func _anim(dt: float) -> void:
 			golem_attack = minf(1.0, golem_attack + dt * 1.2)
 		var gk: float = 1.0 if dt == 0.0 else minf(1.0, dt * 10.0)
 		pp.pose(_chaser_target(hz, hero_t, clampf(hz_speed * 6.0, 0.25, 1.0)), gk)
-		var cs: float = CHASER_H[hz] * g / pp.size.y
-		var lead := wx(_hazard_front())
+		var cs: float = CHASER_H[hz] * boss_k * g / pp.size.y
+		var reach_px: float = _hazard_width() * (1.0 - 1.0 / PUPPET_REACH.get(hz, 1.3)) * g
+		var lead := wx(_hazard_front()) - facing * reach_px   # the body stops short; its reach fills the rest
 		var hop: float = absf(sin(chaser_phase)) * 0.3 if hz == "golem" else 0.0
 		pp.place(Vector2(lead - facing * pp.front_offset(cs), wy(BY - 1.1 - hop)), cs, facing)
 	if dt > 0.0 and (state == "idle" or state == "busy" or state == "paused"):

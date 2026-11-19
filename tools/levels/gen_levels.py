@@ -75,7 +75,7 @@ def check(rows, shaft, boss):
     s, w = shaft
     left_w = s * CELL - 1
     right_w = COLS * CELL - (s + w) * CELL - 1
-    need = 30 if boss else 20
+    need = 40 if boss else 20   # boss levels get the widest room, so the boss stands well back from Zaki
     side = "left" if left_w >= right_w else "right"
     if max(left_w, right_w) < need:
         return None
