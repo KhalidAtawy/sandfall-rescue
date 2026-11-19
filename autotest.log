@@ -1,0 +1,75 @@
+Godot Engine v4.4.1.stable.official.49a5bc7b6 - https://godotengine.org
+WARNING: Could not set V-Sync mode, as changing V-Sync mode is not supported by the graphics driver.
+     at: set_use_vsync (platform/linuxbsd/x11/gl_manager_x11.cpp:360)
+OpenGL API 4.5 (Core Profile) Mesa 26.0.8-1ubuntu0.3 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 21.1.8, 256 bits)
+
+AUTOTEST shot 00_title
+AUTOTEST shot 01_map
+AUTOTEST shot 02_intro
+AUTOTEST shot L1_a_start
+AUTOTEST shot L1_b_chase
+AUTOTEST shot L1_c_bonus
+AUTOTEST RESULT level=1 mode=drain boss=false state=won moves_left=14 danger_peak=0.16 danger_end=0.00 secs=41
+AUTOTEST shot L1_d_end
+AUTOTEST shot L3_a_start
+AUTOTEST shot L3_c_bonus
+AUTOTEST RESULT level=3 mode=collect boss=false state=won moves_left=1 danger_peak=0.00 danger_end=0.00 secs=21
+AUTOTEST shot L3_d_end
+AUTOTEST shot L5_a_start
+AUTOTEST shot L5_b_chase
+AUTOTEST shot L5_c_bonus
+AUTOTEST RESULT level=5 mode=drain boss=false state=won moves_left=5 danger_peak=0.05 danger_end=0.00 secs=21
+AUTOTEST shot L5_d_end
+AUTOTEST shot L10_a_start
+AUTOTEST shot L10_b_chase
+AUTOTEST shot L10_c_bonus
+AUTOTEST RESULT level=10 mode=drain boss=true state=won moves_left=0 danger_peak=0.28 danger_end=0.00 secs=29
+AUTOTEST shot L10_d_end
+AUTOTEST shot L13_a_start
+AUTOTEST shot L13_c_bonus
+AUTOTEST RESULT level=13 mode=collect boss=false state=won moves_left=6 danger_peak=0.00 danger_end=0.00 secs=17
+AUTOTEST shot L13_d_end
+AUTOTEST shot L20_a_start
+AUTOTEST shot L20_c_bonus
+AUTOTEST RESULT level=20 mode=iron boss=true state=won moves_left=2 danger_peak=0.35 danger_end=0.00 secs=26
+AUTOTEST shot L20_d_end
+AUTOTEST shot L34_a_start
+AUTOTEST shot L34_b_chase
+AUTOTEST shot L34_c_bonus
+AUTOTEST RESULT level=34 mode=chain boss=false state=won moves_left=1 danger_peak=0.21 danger_end=0.00 secs=30
+AUTOTEST shot L34_d_end
+AUTOTEST shot L46_a_start
+AUTOTEST shot L46_b_chase
+AUTOTEST shot L46_c_bonus
+AUTOTEST RESULT level=46 mode=wrap boss=false state=won moves_left=0 danger_peak=0.26 danger_end=0.00 secs=42
+AUTOTEST shot L46_d_end
+AUTOTEST shot L55_a_start
+AUTOTEST shot L55_b_chase
+AUTOTEST shot L55_c_bonus
+AUTOTEST RESULT level=55 mode=drain boss=false state=won moves_left=5 danger_peak=0.03 danger_end=0.00 secs=16
+AUTOTEST shot L55_d_end
+AUTOTEST shot L60_a_start
+AUTOTEST shot L60_b_chase
+AUTOTEST shot L60_c_bonus
+AUTOTEST RESULT level=60 mode=race boss=true state=won moves_left=9999 danger_peak=0.99 danger_end=0.00 secs=29
+AUTOTEST shot L60_d_end
+ERROR: Lambda capture at index 0 was freed. Passed "null" instead.
+   at: call (modules/gdscript/gdscript_lambda_callable.cpp:240)
+ERROR: Lambda capture at index 0 was freed. Passed "null" instead.
+   at: call (modules/gdscript/gdscript_lambda_callable.cpp:240)
+AUTOTEST shot 90_bonus_intro
+AUTOTEST shot 91_bonus_play
+AUTOTEST BONUS coins=47
+AUTOTEST shot 92_bonus_end
+AUTOTEST shot 99_map
+AUTOTEST shot 95_profile
+AUTOTEST shot 96_store
+AUTOTEST shot 97_seam_10
+AUTOTEST shot 97_seam_30
+AUTOTEST shot 97_seam_70
+AUTOTEST shot 98_map_w4
+AUTOTEST shot 98_map_w6
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2378)
+ERROR: 2 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:614)
