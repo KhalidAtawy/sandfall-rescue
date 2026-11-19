@@ -3969,8 +3969,11 @@ func _draw_source(ci: CanvasItem) -> void:
 		src_tex[w] = load(st_path) if ResourceLoader.exists(st_path) else null
 	if src_tex[w] != null:
 		var st: Texture2D = src_tex[w]
-		var sw_px := u * 11.0
-		var sh_px := sw_px * st.get_height() / st.get_width()
+		var sh_px := u * 9.0
+		var sw_px := sh_px * st.get_width() / st.get_height()
+		if sw_px > u * 12.0:
+			sw_px = u * 12.0
+			sh_px = sw_px * st.get_height() / st.get_width()
 		var bounce := absf(sin(time * 18.0)) * u * 0.35 if pouring else 0.0
 		ci.draw_texture_rect(st, Rect2(x - sw_px / 2.0 + jig, y + u * 0.6 - sh_px - bounce, sw_px, sh_px), false)
 		return
